@@ -1,0 +1,724 @@
+<title>Signal Desk</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Special+Elite&family=Courier+Prime:wght@400;700&family=Newsreader:ital,wght@0,500;0,600;1,500&family=Manrope:wght@500;600;700;800&display=swap">
+<style>
+:root{
+  --chrome-bg:#eef0f4; --chrome-text:#3a3f4a; --chrome-border:#d7dae1; --chrome-active:#171b26;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --chrome-bg:#0b0e14; --chrome-text:#aab0bf; --chrome-border:#232838; --chrome-active:#f2f4f8; }
+}
+:root[data-theme="dark"]{ --chrome-bg:#0b0e14; --chrome-text:#aab0bf; --chrome-border:#232838; --chrome-active:#f2f4f8; }
+
+*{box-sizing:border-box;}
+body{background:var(--chrome-bg);margin:0;}
+
+/* ---------- switcher chrome ---------- */
+.switcher{
+  position:sticky; top:0; z-index:300;
+  display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;
+  padding:.6rem 1rem; background:var(--chrome-bg); border-bottom:1px solid var(--chrome-border);
+}
+.switcher-label{
+  font:600 .72rem/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--chrome-text); margin-right:.4rem;
+}
+.switch-btn{
+  font:600 .8rem/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  padding:.45rem .85rem; border-radius:7px; border:1px solid var(--chrome-border);
+  background:transparent; color:var(--chrome-text); cursor:pointer;
+}
+.switch-btn:hover{ border-color:var(--chrome-active); }
+.switch-btn.active{ background:var(--chrome-active); color:var(--chrome-bg); border-color:var(--chrome-active); }
+.switch-btn:focus-visible{ outline:2px solid var(--chrome-active); outline-offset:2px; }
+.switcher-sub{ font:400 .74rem/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--chrome-text); opacity:.8; width:100%; margin-top:.15rem; }
+
+.design{ min-height:100vh; }
+[hidden]{ display:none !important; }
+
+/* =====================================================================
+   SHARED SIDE PANEL MECHANICS + generic content classes
+   (used by Heat Grid, Ticker Tape, Focus — each supplies its own
+   --p-* token values at its .design-X root, so one ruleset here
+   renders three different looks)
+   ===================================================================== */
+.panel-backdrop{ position:fixed; inset:0; background:rgba(8,10,16,.44); opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:399; }
+.panel-backdrop.open{ opacity:1; pointer-events:auto; }
+.panel{
+  position:fixed; top:0; right:0; height:100%; width:min(440px,100%);
+  background:var(--p-bg); color:var(--p-text); border-left:1px solid var(--p-border);
+  font-family:var(--p-font-body); transform:translateX(100%); transition:transform .24s ease;
+  z-index:400; overflow-y:auto;
+}
+.panel.open{ transform:translateX(0); }
+.panel-inner{ padding:1.3rem 1.2rem 3rem; }
+.p-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:.6rem; margin-bottom:1rem; }
+.p-sym{ font-family:var(--p-font-display); font-size:1.55rem; font-weight:700; margin:0; }
+.p-name{ color:var(--p-dim); font-size:.82rem; margin-top:.15rem; }
+.p-price{ font-family:var(--p-font-mono); font-size:1.05rem; margin-top:.4rem; font-variant-numeric:tabular-nums; }
+.pup{ color:var(--p-bull); } .pdown{ color:var(--p-bear); }
+.p-close{ background:var(--p-surface); border:1px solid var(--p-border); color:var(--p-text); width:30px; height:30px; border-radius:8px; cursor:pointer; flex:none; }
+.p-score-row{ display:flex; gap:.6rem; margin:1rem 0 1.2rem; }
+.p-score-box{ flex:1; background:var(--p-surface); border:1px solid var(--p-border); border-radius:var(--p-radius,10px); padding:.65rem .8rem; }
+.p-score-box .k{ font-size:.64rem; text-transform:uppercase; letter-spacing:.06em; color:var(--p-dim); font-weight:700; }
+.p-score-box .v{ font-size:1.1rem; font-weight:800; margin-top:.15rem; font-family:var(--p-font-display); }
+.p-comp{ font-size:.82rem; color:var(--p-dim); margin-bottom:1.1rem; }
+.p-section-title{ font:700 .68rem/1 inherit; letter-spacing:.08em; text-transform:uppercase; color:var(--p-dim); margin-bottom:.6rem; }
+.p-source{ border:1px solid var(--p-border); border-radius:var(--p-radius,10px); padding:.75rem .85rem; margin-bottom:.6rem; background:var(--p-surface); }
+.p-source-top{ display:flex; justify-content:space-between; gap:.5rem; font-size:.7rem; color:var(--p-dim); margin-bottom:.3rem; }
+.p-source-head{ font-size:.86rem; line-height:1.45; }
+.p-tag{ display:inline-flex; align-items:center; gap:.3rem; font:700 .68rem/1 inherit; padding:.28rem .55rem; border-radius:999px; flex:none; }
+.p-tag.bull{ color:var(--p-bull); background:var(--p-bull-tint); }
+.p-tag.bear{ color:var(--p-bear); background:var(--p-bear-tint); }
+.p-tag.neu{ color:var(--p-neu); background:var(--p-neu-tint); }
+
+/* =====================================================================
+   TERMINAL — committed dark, phosphor-amber trading desk
+   ===================================================================== */
+.design-terminal{
+  --bg:#0b0d09; --surface:#12150e; --surface2:#181c11; --border:#2a2f1f;
+  --text:#cdd6b8; --dim:#899070; --amber:#f0a93b; --amber-hi:#ffcf7a;
+  --bull:#5fd97a; --bull-dim:rgba(95,217,122,.16);
+  --bear:#ff6b63; --bear-dim:rgba(255,107,99,.16);
+  --neu:#8fa8c9; --neu-dim:rgba(143,168,201,.16);
+  background:var(--bg); color:var(--text);
+  font-family:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+.t-wrap{ max-width:1100px; margin:0 auto; padding:1.25rem 1rem 3rem; }
+.t-marquee{
+  overflow:hidden; white-space:nowrap; border:1px solid var(--border); background:var(--surface);
+  padding:.5rem 0; margin-bottom:1.1rem; border-radius:3px;
+}
+.t-marquee-track{ display:inline-block; padding-left:100%; animation:t-scroll 34s linear infinite; }
+@media (prefers-reduced-motion: reduce){ .t-marquee-track{ animation:none; padding-left:1rem; } }
+@keyframes t-scroll{ from{ transform:translateX(0); } to{ transform:translateX(-100%); } }
+.t-marquee span{ padding:0 1.1rem; font-size:.78rem; letter-spacing:.02em; }
+.t-marquee .up{ color:var(--bull); } .t-marquee .down{ color:var(--bear); }
+
+.t-head{ display:flex; justify-content:space-between; align-items:flex-end; gap:1rem; margin-bottom:.9rem; flex-wrap:wrap; }
+.t-title{ font-size:1.05rem; font-weight:600; color:var(--amber-hi); letter-spacing:.01em; margin:0; }
+.t-title small{ display:block; font-weight:400; color:var(--dim); font-size:.72rem; margin-top:.2rem; letter-spacing:.08em; text-transform:uppercase; }
+.t-filters{ display:flex; gap:.4rem; }
+.t-filter-btn{
+  font:600 .72rem/1 inherit; letter-spacing:.06em; text-transform:uppercase;
+  background:var(--surface); color:var(--dim); border:1px solid var(--border);
+  padding:.4rem .7rem; border-radius:3px; cursor:pointer;
+}
+.t-filter-btn.active{ color:var(--bg); background:var(--amber); border-color:var(--amber); }
+
+.t-table-wrap{ overflow-x:auto; border:1px solid var(--border); border-radius:4px; }
+.t-table{ width:100%; border-collapse:collapse; font-size:.82rem; min-width:640px; }
+.t-table th{
+  text-align:left; font:600 .68rem/1 inherit; letter-spacing:.07em; text-transform:uppercase;
+  color:var(--dim); padding:.6rem .7rem; border-bottom:1px solid var(--border); background:var(--surface);
+  position:sticky; top:44px; cursor:pointer; user-select:none; white-space:nowrap;
+}
+.t-table th.num, .t-table td.num{ text-align:right; font-variant-numeric:tabular-nums; }
+.t-table td{ padding:.55rem .7rem; border-bottom:1px solid var(--border); }
+.t-row{ cursor:pointer; }
+.t-row:hover{ background:var(--surface2); }
+.t-star{ background:none; border:none; color:var(--border); cursor:pointer; font-size:.85rem; padding:0 .3rem; }
+.t-star.on{ color:var(--amber); }
+.t-sym{ font-weight:700; color:var(--text); }
+.t-name{ color:var(--dim); font-size:.76rem; }
+.t-chg.up{ color:var(--bull); } .t-chg.down{ color:var(--bear); }
+.t-pill{ display:inline-flex; align-items:center; gap:.3rem; font:700 .68rem/1 inherit; letter-spacing:.04em; padding:.28rem .5rem; border-radius:3px; }
+.t-pill.bull{ color:var(--bull); background:var(--bull-dim); }
+.t-pill.bear{ color:var(--bear); background:var(--bear-dim); }
+.t-pill.neu{ color:var(--neu); background:var(--neu-dim); }
+.t-conv{ display:flex; align-items:center; gap:.4rem; }
+.t-conv-track{ width:52px; height:5px; background:var(--border); border-radius:3px; overflow:hidden; }
+.t-conv-fill{ height:100%; background:var(--amber); }
+.t-spark{ display:block; }
+.t-foot{ font-size:.72rem; color:var(--dim); padding:.6rem .2rem; letter-spacing:.03em; }
+
+.t-detail-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; margin-bottom:1.2rem; flex-wrap:wrap; }
+.t-back{ background:none; border:1px solid var(--border); color:var(--dim); font:600 .74rem/1 inherit; padding:.45rem .7rem; border-radius:3px; cursor:pointer; margin-bottom:1rem; }
+.t-back:hover{ color:var(--amber); border-color:var(--amber); }
+.t-dsym{ font-size:1.7rem; font-weight:700; color:var(--amber-hi); margin:0; }
+.t-dname{ color:var(--dim); font-size:.82rem; margin-top:.2rem; }
+.t-dprice{ font-size:1.5rem; font-weight:600; text-align:right; }
+.t-score-row{ display:flex; gap:.8rem; margin-bottom:1.3rem; flex-wrap:wrap; }
+.t-score-box{ border:1px solid var(--border); background:var(--surface); border-radius:4px; padding:.7rem .9rem; min-width:130px; }
+.t-score-box .k{ font-size:.66rem; letter-spacing:.07em; text-transform:uppercase; color:var(--dim); }
+.t-score-box .v{ font-size:1.2rem; font-weight:700; margin-top:.15rem; }
+.t-comp{ font-size:.74rem; color:var(--dim); margin-bottom:1.1rem; }
+.t-source-log{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.55rem; }
+.t-source{ border:1px solid var(--border); background:var(--surface); border-radius:4px; padding:.7rem .85rem; }
+.t-source-top{ display:flex; justify-content:space-between; gap:.6rem; font-size:.7rem; color:var(--dim); letter-spacing:.03em; margin-bottom:.3rem; }
+.t-source-head{ font-size:.85rem; color:var(--text); line-height:1.4; margin-bottom:.4rem; }
+
+/* =====================================================================
+   HEAT GRID — committed dark, sensor-array / HUD cockpit
+   ===================================================================== */
+.design-heatgrid{
+  --p-bg:#070b14; --p-surface:#0e1626; --p-border:#1e2b44; --p-text:#d7e1f2; --p-dim:#6f7fa0;
+  --p-font-display:"Rajdhani",sans-serif; --p-font-body:"Manrope",-apple-system,BlinkMacSystemFont,sans-serif; --p-font-mono:"IBM Plex Mono",monospace;
+  --p-radius:10px;
+  --p-bull:#4fd07a; --p-bull-tint:rgba(79,208,122,.16);
+  --p-bear:#ff5470; --p-bear-tint:rgba(255,84,112,.16);
+  --p-neu:#8ba3c9; --p-neu-tint:rgba(139,163,201,.16);
+  --hg-cyan:#35e0ce;
+  background:radial-gradient(120% 90% at 50% -10%, #0d1830 0%, var(--p-bg) 60%); color:var(--p-text); font-family:var(--p-font-body);
+}
+.hg-wrap{ max-width:1080px; margin:0 auto; padding:1.4rem 1.1rem 3.5rem; }
+.hg-title{ font-family:var(--p-font-display); font-size:1.5rem; font-weight:700; letter-spacing:.02em; margin:0 0 1rem; }
+.hg-title small{ display:block; font-family:var(--p-font-body); font-weight:600; font-size:.7rem; color:var(--p-dim); text-transform:uppercase; letter-spacing:.1em; margin-top:.3rem; }
+.hg-toolbar{ display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; margin-bottom:1.1rem; }
+.hg-search{ font:500 .84rem/1 var(--p-font-body); background:var(--p-surface); border:1px solid var(--p-border); border-radius:8px; padding:.55rem .8rem; color:var(--p-text); min-width:180px; }
+.hg-search::placeholder{ color:var(--p-dim); }
+.hg-chip-row{ display:flex; gap:.4rem; }
+.hg-chip{ font:700 .72rem/1 var(--p-font-body); letter-spacing:.04em; background:var(--p-surface); color:var(--p-dim); border:1px solid var(--p-border); border-radius:999px; padding:.4rem .8rem; cursor:pointer; }
+.hg-chip.active{ background:var(--hg-cyan); color:#04211d; border-color:var(--hg-cyan); }
+.hg-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(132px,1fr)); gap:.7rem; }
+.hg-tile{ position:relative; border:1px solid var(--p-border); border-left:3px solid var(--p-border); background:var(--p-surface); border-radius:var(--p-radius); padding:.8rem .8rem .7rem; cursor:pointer; transition:border-color .15s ease; }
+.hg-tile:hover{ border-color:var(--hg-cyan); }
+.hg-tile.sig-bull{ border-left-color:var(--p-bull); } .hg-tile.sig-bull .hg-arrow{ color:var(--p-bull); }
+.hg-tile.sig-bear{ border-left-color:var(--p-bear); } .hg-tile.sig-bear .hg-arrow{ color:var(--p-bear); }
+.hg-tile.sig-neu{ border-left-color:var(--p-neu); } .hg-tile.sig-neu .hg-arrow{ color:var(--p-neu); }
+.hg-tile-top{ display:flex; justify-content:space-between; align-items:center; }
+.hg-sym{ font-family:var(--p-font-display); font-weight:700; font-size:1rem; letter-spacing:.02em; }
+.hg-arrow{ font-size:.85rem; }
+.hg-tile-mid{ position:relative; display:flex; justify-content:center; margin:.35rem 0; }
+.hg-ring{ width:52px; height:52px; transform:rotate(-90deg); }
+.hg-ring-track{ fill:none; stroke:var(--p-border); stroke-width:2.4; }
+.hg-ring-fill{ fill:none; stroke:var(--hg-cyan); stroke-width:2.4; stroke-linecap:round; }
+.hg-cv{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-family:var(--p-font-mono); font-weight:700; font-size:.82rem; }
+.hg-tile-bottom{ display:flex; justify-content:space-between; align-items:baseline; font-family:var(--p-font-mono); font-size:.76rem; font-variant-numeric:tabular-nums; }
+.hg-chg.up{ color:var(--p-bull); } .hg-chg.down{ color:var(--p-bear); }
+.hg-foot{ font-size:.74rem; color:var(--p-dim); margin-top:1rem; }
+
+/* =====================================================================
+   TICKER TAPE — committed light, mechanical paper-tape / teleprinter
+   ===================================================================== */
+.design-tickertape{
+  --p-bg:#dfd8c5; --p-surface:#d3cbb3; --p-border:#c1b799; --p-text:#211d16; --p-dim:#5b5344;
+  --p-font-display:"Special Elite",monospace; --p-font-body:"Courier Prime",ui-monospace,monospace; --p-font-mono:"Courier Prime",monospace;
+  --p-radius:2px;
+  --p-bull:#2f5d3a; --p-bull-tint:rgba(47,93,58,.14);
+  --p-bear:#a3272c; --p-bear-tint:rgba(163,39,44,.14);
+  --p-neu:#4a4438; --p-neu-tint:rgba(74,68,56,.12);
+  background:var(--p-bg); color:var(--p-text); font-family:var(--p-font-body);
+}
+.tt-wrap{ max-width:640px; margin:0 auto; padding:1.5rem .9rem 3.5rem; }
+.tt-masthead{ text-align:center; margin-bottom:1.1rem; }
+.tt-masthead h1{ font-family:var(--p-font-display); font-size:1.25rem; letter-spacing:.03em; margin:0 0 .35rem; }
+.tt-masthead .sub{ font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--p-dim); }
+.tt-toolbar{ display:flex; gap:.5rem; justify-content:center; flex-wrap:wrap; margin-bottom:1rem; }
+.tt-search{ font-family:var(--p-font-body); background:var(--p-surface); border:1px solid var(--p-border); padding:.45rem .6rem; color:var(--p-text); min-width:160px; }
+.tt-search::placeholder{ color:var(--p-dim); }
+.tt-chip-row{ display:flex; gap:.4rem; }
+.tt-chip{ font:700 .7rem/1 var(--p-font-body); letter-spacing:.04em; text-transform:uppercase; background:var(--p-surface); border:1px solid var(--p-border); color:var(--p-dim); padding:.4rem .7rem; cursor:pointer; }
+.tt-chip.active{ background:var(--p-text); color:var(--p-bg); border-color:var(--p-text); }
+.tt-roll{ background:var(--p-surface); border:1px solid var(--p-border); position:relative; padding:.3rem 0; }
+.tt-roll::before, .tt-roll::after{ content:""; position:absolute; top:0; bottom:0; width:14px; background-image:radial-gradient(circle at 7px 10px, var(--p-bg) 4px, transparent 4.3px); background-size:14px 20px; background-repeat:repeat-y; }
+.tt-roll::before{ left:0; } .tt-roll::after{ right:0; }
+.tt-line{ display:flex; align-items:center; gap:.55rem; padding:.5rem 1.5rem; cursor:pointer; font-family:var(--p-font-mono); font-size:.85rem; }
+.tt-line:nth-child(even){ background:rgba(0,0,0,.03); }
+.tt-line:hover{ background:rgba(0,0,0,.06); }
+.tt-caret{ color:var(--p-dim); }
+.tt-sym{ font-weight:700; min-width:48px; }
+.tt-name{ color:var(--p-dim); flex:1; font-size:.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tt-price{ min-width:66px; text-align:right; font-variant-numeric:tabular-nums; }
+.tt-chg{ min-width:62px; text-align:right; font-variant-numeric:tabular-nums; }
+.tt-chg.up{ color:var(--p-bull); } .tt-chg.down{ color:var(--p-bear); }
+.tt-dots{ letter-spacing:1px; min-width:58px; font-size:.76rem; }
+.tt-dots.bull{ color:var(--p-bull); } .tt-dots.bear{ color:var(--p-bear); } .tt-dots.neu{ color:var(--p-neu); }
+.tt-foot{ text-align:center; font-size:.72rem; color:var(--p-dim); margin-top:.9rem; }
+.tt-torn{ height:10px; background-image:repeating-linear-gradient(115deg, var(--p-bg) 0 6px, transparent 6px 12px); margin:-1.3rem -1.2rem 1rem; }
+
+/* =====================================================================
+   FOCUS — full light/dark, quiet premium consumer app
+   ===================================================================== */
+.design-focus{
+  --p-bg:#f2f4f7; --p-surface:#ffffff; --p-border:#e3e7ee; --p-text:#151a23; --p-dim:#68707e;
+  --p-font-display:"Newsreader",Georgia,"Times New Roman",serif; --p-font-body:"Manrope",-apple-system,BlinkMacSystemFont,sans-serif; --p-font-mono:"IBM Plex Mono",monospace;
+  --p-radius:14px;
+  --p-bull:#1f8a4c; --p-bull-tint:rgba(31,138,76,.10);
+  --p-bear:#c3453a; --p-bear-tint:rgba(195,69,58,.10);
+  --p-neu:#767f8f; --p-neu-tint:rgba(118,127,143,.10);
+  --fc-accent:#0e6f66;
+  background:var(--p-bg); color:var(--p-text); font-family:var(--p-font-body);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .design-focus{
+    --p-bg:#12161d; --p-surface:#1a1f28; --p-border:#2a3040; --p-text:#eef1f6; --p-dim:#9aa2b2;
+    --p-bull:#4ade80; --p-bull-tint:rgba(74,222,128,.14);
+    --p-bear:#f87171; --p-bear-tint:rgba(248,113,113,.14);
+    --p-neu:#a4acc0; --p-neu-tint:rgba(164,172,192,.14);
+    --fc-accent:#2dd4c4;
+  }
+}
+:root[data-theme="dark"] .design-focus{
+  --p-bg:#12161d; --p-surface:#1a1f28; --p-border:#2a3040; --p-text:#eef1f6; --p-dim:#9aa2b2;
+  --p-bull:#4ade80; --p-bull-tint:rgba(74,222,128,.14);
+  --p-bear:#f87171; --p-bear-tint:rgba(248,113,113,.14);
+  --p-neu:#a4acc0; --p-neu-tint:rgba(164,172,192,.14);
+  --fc-accent:#2dd4c4;
+}
+.fc-wrap{ max-width:640px; margin:0 auto; padding:2.1rem 1.2rem 4rem; }
+.fc-title{ font-family:var(--p-font-display); font-size:1.85rem; font-weight:600; margin:0; letter-spacing:-.01em; }
+.fc-title small{ display:block; font-family:var(--p-font-body); font-weight:600; font-size:.7rem; color:var(--p-dim); text-transform:uppercase; letter-spacing:.08em; margin-top:.45rem; }
+.fc-toolbar{ display:flex; gap:.5rem; margin:1.3rem 0 1.5rem; flex-wrap:wrap; align-items:center; }
+.fc-search{ font:500 .85rem/1 var(--p-font-body); background:var(--p-surface); border:1px solid var(--p-border); border-radius:10px; padding:.55rem .8rem; color:var(--p-text); flex:1; min-width:160px; }
+.fc-search::placeholder{ color:var(--p-dim); }
+.fc-chip-row{ display:flex; gap:.4rem; }
+.fc-chip{ font:600 .76rem/1 var(--p-font-body); background:var(--p-surface); border:1px solid var(--p-border); color:var(--p-dim); border-radius:999px; padding:.45rem .85rem; cursor:pointer; }
+.fc-chip.active{ background:var(--fc-accent); color:#fff; border-color:var(--fc-accent); }
+.fc-list{ display:flex; flex-direction:column; }
+.fc-row{ display:flex; align-items:center; gap:.9rem; padding:.9rem .5rem; border-bottom:1px solid var(--p-border); cursor:pointer; border-radius:10px; }
+.fc-row:last-child{ border-bottom:none; }
+.fc-row:hover{ background:var(--p-surface); }
+.fc-row-main{ flex:1; min-width:0; }
+.fc-sym{ font-family:var(--p-font-display); font-size:1.05rem; font-weight:600; }
+.fc-name{ color:var(--p-dim); font-size:.8rem; margin-top:.1rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fc-signal{ display:flex; align-items:center; gap:.4rem; font:600 .74rem/1 var(--p-font-body); color:var(--p-dim); min-width:88px; }
+.fc-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
+.fc-dot.bull{ background:var(--p-bull); } .fc-dot.bear{ background:var(--p-bear); } .fc-dot.neu{ background:var(--p-neu); }
+.fc-meter{ width:60px; flex:none; }
+.fc-meter-track{ height:3px; background:var(--p-border); border-radius:2px; overflow:hidden; }
+.fc-meter-fill{ height:100%; background:var(--fc-accent); }
+.fc-price-col{ text-align:right; min-width:84px; flex:none; }
+.fc-price{ font-family:var(--p-font-display); font-size:1.05rem; font-style:italic; }
+.fc-chg{ font-size:.78rem; font-variant-numeric:tabular-nums; }
+.fc-chg.up{ color:var(--p-bull); } .fc-chg.down{ color:var(--p-bear); }
+.fc-foot{ text-align:center; font-size:.78rem; color:var(--p-dim); margin-top:1.2rem; }
+.fc-summary{ font-size:.92rem; line-height:1.6; color:var(--p-text); background:var(--p-surface); border:1px solid var(--p-border); border-radius:var(--p-radius); padding:.85rem 1rem; margin:0 0 1.2rem; font-style:italic; }
+
+@media (max-width:520px){
+  .t-name, .t-table th:nth-child(3), .t-table td:nth-child(3){ display:none; }
+  .tt-name{ display:none; }
+  .fc-meter{ display:none; }
+}
+</style>
+
+<div class="switcher" role="tablist" aria-label="Design direction">
+  <span class="switcher-label">Signal Desk — concept</span>
+  <button class="switch-btn active" data-target="terminal" role="tab" aria-selected="true">Terminal</button>
+  <button class="switch-btn" data-target="heatgrid" role="tab" aria-selected="false">Heat Grid</button>
+  <button class="switch-btn" data-target="tickertape" role="tab" aria-selected="false">Ticker Tape</button>
+  <button class="switch-btn" data-target="focus" role="tab" aria-selected="false">Focus</button>
+  <span class="switcher-sub" id="switcher-sub">Terminal — dense phosphor-amber trading desk, built for scanning many tickers fast.</span>
+</div>
+
+<main>
+
+<!-- ===================== TERMINAL ===================== -->
+<section class="design design-terminal" data-design="terminal">
+  <div class="view view-list" data-view="list">
+    <div class="t-wrap">
+      <div class="t-marquee"><div class="t-marquee-track" id="t-marquee"></div></div>
+      <div class="t-head">
+        <p class="t-title">TOP 100 · SIGNAL SCAN<small>Aggregated from news, filings &amp; social — updated 4m ago</small></p>
+        <div class="t-filters" id="t-filters">
+          <button class="t-filter-btn active" data-asset="all">All</button>
+          <button class="t-filter-btn" data-asset="stock">Equities</button>
+          <button class="t-filter-btn" data-asset="crypto">Crypto</button>
+        </div>
+      </div>
+      <div class="t-table-wrap">
+        <table class="t-table">
+          <thead><tr>
+            <th></th><th>Symbol</th><th>Name</th><th class="num">Price</th><th class="num">Chg</th>
+            <th>Signal</th><th data-sort="cv">Conviction ▾</th><th>Trend</th>
+          </tr></thead>
+          <tbody id="t-rows"></tbody>
+        </table>
+      </div>
+      <div class="t-foot">Showing 26 of 100 tracked tickers, sorted by conviction. Source log available per ticker.</div>
+    </div>
+  </div>
+  <div class="view view-detail" data-view="detail" hidden>
+    <div class="t-wrap" id="t-detail"></div>
+  </div>
+</section>
+
+<!-- ===================== HEAT GRID ===================== -->
+<section class="design design-heatgrid" data-design="heatgrid" hidden>
+  <div class="hg-wrap">
+    <h1 class="hg-title">Signal Radar<small>Top 100 · conviction-weighted array</small></h1>
+    <div class="hg-toolbar">
+      <input class="hg-search" id="hg-search" placeholder="Locate symbol…" />
+      <div class="hg-chip-row" id="hg-assets">
+        <button class="hg-chip active" data-asset="all">All</button>
+        <button class="hg-chip" data-asset="stock">Equities</button>
+        <button class="hg-chip" data-asset="crypto">Crypto</button>
+      </div>
+    </div>
+    <div class="hg-grid" id="hg-grid"></div>
+    <div class="hg-foot">26 of 100 tracked · ring glow reflects conviction, edge color reflects direction</div>
+  </div>
+  <div class="panel-backdrop" id="heatgrid-backdrop"></div>
+  <div class="panel" id="heatgrid-panel" role="dialog" aria-label="Signal detail" aria-hidden="true">
+    <div class="panel-inner" id="heatgrid-panel-body"></div>
+  </div>
+</section>
+
+<!-- ===================== TICKER TAPE ===================== -->
+<section class="design design-tickertape" data-design="tickertape" hidden>
+  <div class="tt-wrap">
+    <div class="tt-masthead">
+      <h1>SIGNAL WIRE SERVICE</h1>
+      <div class="sub">Top 100 · continuous tape · black = neutral, green = up, red = down</div>
+    </div>
+    <div class="tt-toolbar">
+      <input class="tt-search" id="tt-search" placeholder="Find symbol…" />
+      <div class="tt-chip-row" id="tt-assets">
+        <button class="tt-chip active" data-asset="all">All</button>
+        <button class="tt-chip" data-asset="stock">Equities</button>
+        <button class="tt-chip" data-asset="crypto">Digital</button>
+      </div>
+    </div>
+    <div class="tt-roll"><div id="tt-rows"></div></div>
+    <div class="tt-foot">26 of 100 on tape · dots at line end mark conviction, five filled is strongest</div>
+  </div>
+  <div class="panel-backdrop" id="tickertape-backdrop"></div>
+  <div class="panel" id="tickertape-panel" role="dialog" aria-label="Signal detail" aria-hidden="true">
+    <div class="panel-inner" id="tickertape-panel-body"></div>
+  </div>
+</section>
+
+<!-- ===================== FOCUS ===================== -->
+<section class="design design-focus" data-design="focus" hidden>
+  <div class="fc-wrap">
+    <h1 class="fc-title">Today's signals<small>Top 100 · equities &amp; crypto</small></h1>
+    <div class="fc-toolbar">
+      <input class="fc-search" id="fc-search" placeholder="Search a symbol or company…" />
+      <div class="fc-chip-row" id="fc-assets">
+        <button class="fc-chip active" data-asset="all">All</button>
+        <button class="fc-chip" data-asset="stock">Equities</button>
+        <button class="fc-chip" data-asset="crypto">Crypto</button>
+      </div>
+    </div>
+    <div class="fc-list" id="fc-rows"></div>
+    <div class="fc-foot">Showing 26 of 100 — tap any row for the full picture</div>
+  </div>
+  <div class="panel-backdrop" id="focus-backdrop"></div>
+  <div class="panel" id="focus-panel" role="dialog" aria-label="Signal detail" aria-hidden="true">
+    <div class="panel-inner" id="focus-panel-body"></div>
+  </div>
+</section>
+
+</main>
+
+<script>
+(function(){
+"use strict";
+
+const DATA = [
+ {s:"NVDA",n:"NVIDIA",sec:"Semiconductors",a:"stock",p:187.42,c:2.14,sig:"bull",cv:82,src:[
+   {so:"Reuters",h:"NVIDIA raises data-center chip guidance on hyperscaler demand",t:"3h",tag:"bull"},
+   {so:"The Information",h:"Cloud providers reportedly pre-buying next-gen GPU allocation",t:"1d",tag:"bull"}]},
+ {s:"AAPL",n:"Apple",sec:"Consumer Tech",a:"stock",p:229.87,c:0.12,sig:"neu",cv:51,src:[
+   {so:"Bloomberg",h:"iPhone upgrade cycle tracking in line with last year, analysts say",t:"6h",tag:"neu"},
+   {so:"CNBC",h:"Services revenue growth offsets flat hardware unit sales",t:"1d",tag:"bull"}]},
+ {s:"TSLA",n:"Tesla",sec:"Automotive",a:"stock",p:238.60,c:-3.41,sig:"bear",cv:68,src:[
+   {so:"Reuters",h:"Tesla Q3 deliveries fall short of consensus estimates",t:"5h",tag:"bear"},
+   {so:"Barron's",h:"Price cuts in China raise margin concerns among analysts",t:"1d",tag:"bear"}]},
+ {s:"MSFT",n:"Microsoft",sec:"Software",a:"stock",p:421.03,c:1.05,sig:"bull",cv:74,src:[
+   {so:"CNBC",h:"Azure growth accelerates on enterprise AI workload demand",t:"4h",tag:"bull"},
+   {so:"Reuters",h:"Copilot seat expansion beats internal targets, sources say",t:"2d",tag:"bull"}]},
+ {s:"AMZN",n:"Amazon",sec:"E-commerce",a:"stock",p:186.20,c:0.88,sig:"bull",cv:63,src:[
+   {so:"MarketWatch",h:"AWS backlog grows as enterprises commit to multi-year deals",t:"7h",tag:"bull"},
+   {so:"CNBC",h:"Holiday logistics capacity expanded ahead of peak season",t:"1d",tag:"neu"}]},
+ {s:"META",n:"Meta Platforms",sec:"Social / Ads",a:"stock",p:563.11,c:-0.24,sig:"neu",cv:55,src:[
+   {so:"The Information",h:"Ad pricing holds steady despite reels monetization push",t:"9h",tag:"neu"},
+   {so:"Reuters",h:"Reality Labs losses widen, weighing on sentiment",t:"1d",tag:"bear"}]},
+ {s:"GOOGL",n:"Alphabet",sec:"Internet",a:"stock",p:172.44,c:1.32,sig:"bull",cv:60,src:[
+   {so:"Bloomberg",h:"Search ad revenue resilient against AI-answer disruption fears",t:"5h",tag:"bull"},
+   {so:"MarketWatch",h:"Cloud unit narrows losses two quarters ahead of plan",t:"2d",tag:"bull"}]},
+ {s:"AMD",n:"Advanced Micro Devices",sec:"Semiconductors",a:"stock",p:164.75,c:2.87,sig:"bull",cv:71,src:[
+   {so:"Reuters",h:"MI350 accelerator orders reportedly exceed prior generation pace",t:"3h",tag:"bull"},
+   {so:"Seeking Alpha",h:"Data center segment margins seen expanding into next year",t:"1d",tag:"bull"}]},
+ {s:"COIN",n:"Coinbase Global",sec:"Crypto Exchange",a:"stock",p:298.55,c:4.62,sig:"bull",cv:77,src:[
+   {so:"CoinDesk",h:"Trading volumes surge alongside broad crypto market rally",t:"2h",tag:"bull"},
+   {so:"Decrypt",h:"Custody assets under management hit new quarterly high",t:"1d",tag:"bull"}]},
+ {s:"MSTR",n:"MicroStrategy",sec:"Crypto Treasury",a:"stock",p:412.90,c:6.18,sig:"bull",cv:85,src:[
+   {so:"CoinDesk",h:"Firm adds to bitcoin holdings in latest treasury purchase",t:"1d",tag:"bull"},
+   {so:"Bloomberg",h:"Premium to net asset value remains elevated versus peers",t:"2d",tag:"neu"}]},
+ {s:"JPM",n:"JPMorgan Chase",sec:"Banking",a:"stock",p:221.30,c:0.05,sig:"neu",cv:48,src:[
+   {so:"Reuters",h:"Net interest income guidance held flat for the quarter",t:"8h",tag:"neu"},
+   {so:"Financial Times",h:"Trading desk revenue offsets softer loan demand",t:"1d",tag:"bull"}]},
+ {s:"XOM",n:"Exxon Mobil",sec:"Energy",a:"stock",p:118.40,c:-1.63,sig:"bear",cv:58,src:[
+   {so:"Reuters",h:"Crude prices slide on rising OPEC+ supply outlook",t:"6h",tag:"bear"},
+   {so:"MarketWatch",h:"Refining margins compress amid seasonal demand dip",t:"1d",tag:"bear"}]},
+ {s:"NFLX",n:"Netflix",sec:"Media",a:"stock",p:768.20,c:0.41,sig:"neu",cv:52,src:[
+   {so:"CNBC",h:"Ad-tier subscriber growth in line with prior guidance",t:"1d",tag:"neu"},
+   {so:"Variety",h:"Live sports slate expands into next quarter",t:"2d",tag:"bull"}]},
+ {s:"DIS",n:"Walt Disney",sec:"Media",a:"stock",p:96.12,c:-2.05,sig:"bear",cv:63,src:[
+   {so:"Reuters",h:"Park attendance softens on international travel pullback",t:"5h",tag:"bear"},
+   {so:"Barron's",h:"Streaming profitability gains offset by studio slate miss",t:"1d",tag:"neu"}]},
+ {s:"BA",n:"Boeing",sec:"Aerospace",a:"stock",p:154.88,c:-4.20,sig:"bear",cv:71,src:[
+   {so:"Reuters",h:"Fresh production quality issue flagged on 737 line",t:"3h",tag:"bear"},
+   {so:"Bloomberg",h:"Delivery targets pushed to next fiscal year, sources say",t:"1d",tag:"bear"}]},
+ {s:"PLTR",n:"Palantir Technologies",sec:"Software",a:"stock",p:41.60,c:3.75,sig:"bull",cv:69,src:[
+   {so:"The Information",h:"Government contract pipeline expands after new AIP wins",t:"4h",tag:"bull"},
+   {so:"Seeking Alpha",h:"Commercial segment bookings accelerate quarter over quarter",t:"2d",tag:"bull"}]},
+ {s:"SOFI",n:"SoFi Technologies",sec:"Fintech",a:"stock",p:16.42,c:2.03,sig:"bull",cv:66,src:[
+   {so:"CNBC",h:"Member growth tops estimates as loan platform scales",t:"6h",tag:"bull"},
+   {so:"MarketWatch",h:"Deposit costs ease, supporting near-term margins",t:"1d",tag:"neu"}]},
+ {s:"RIVN",n:"Rivian Automotive",sec:"Automotive",a:"stock",p:12.85,c:-2.91,sig:"bear",cv:59,src:[
+   {so:"Reuters",h:"Production pace trails plan amid supplier constraints",t:"7h",tag:"bear"},
+   {so:"Bloomberg",h:"Cash runway questioned ahead of next capital raise",t:"1d",tag:"bear"}]},
+ {s:"UNH",n:"UnitedHealth Group",sec:"Healthcare",a:"stock",p:352.10,c:-1.18,sig:"bear",cv:62,src:[
+   {so:"Reuters",h:"Medical cost ratio runs hotter than guided range",t:"5h",tag:"bear"},
+   {so:"Financial Times",h:"Regulatory scrutiny of billing practices continues",t:"2d",tag:"bear"}]},
+ {s:"CVX",n:"Chevron",sec:"Energy",a:"stock",p:151.75,c:-0.30,sig:"neu",cv:45,src:[
+   {so:"MarketWatch",h:"Buyback pace maintained despite softer crude prices",t:"1d",tag:"neu"},
+   {so:"Reuters",h:"Permian output hits new company record",t:"2d",tag:"bull"}]},
+ {s:"SHOP",n:"Shopify",sec:"E-commerce",a:"stock",p:78.30,c:1.94,sig:"bull",cv:64,src:[
+   {so:"The Information",h:"Merchant GMV growth broadens beyond core SMB base",t:"5h",tag:"bull"},
+   {so:"Barron's",h:"International expansion cited as next growth lever",t:"1d",tag:"bull"}]},
+ {s:"ARM",n:"Arm Holdings",sec:"Semiconductors",a:"stock",p:142.60,c:3.02,sig:"bull",cv:73,src:[
+   {so:"Reuters",h:"Royalty rate mix shifts favorably on v9 architecture adoption",t:"4h",tag:"bull"},
+   {so:"Bloomberg",h:"Licensing pipeline for AI accelerators reportedly deepens",t:"1d",tag:"bull"}]},
+ {s:"SNOW",n:"Snowflake",sec:"Software",a:"stock",p:118.90,c:-0.15,sig:"neu",cv:50,src:[
+   {so:"CNBC",h:"Net revenue retention steadies after several soft quarters",t:"1d",tag:"neu"},
+   {so:"Seeking Alpha",h:"AI workload consumption still early relative to peers",t:"2d",tag:"neu"}]},
+ {s:"HOOD",n:"Robinhood Markets",sec:"Fintech",a:"stock",p:29.75,c:2.60,sig:"bull",cv:70,src:[
+   {so:"CoinDesk",h:"Crypto trading volume on platform hits multi-quarter high",t:"3h",tag:"bull"},
+   {so:"MarketWatch",h:"Margin lending balances climb with retail risk appetite",t:"1d",tag:"bull"}]},
+ {s:"BTC",n:"Bitcoin",sec:"Layer 1",a:"crypto",p:71420,c:2.98,sig:"bull",cv:80,src:[
+   {so:"CoinDesk",h:"ETF inflows extend to eighth consecutive session",t:"2h",tag:"bull"},
+   {so:"Decrypt",h:"Exchange reserves fall to multi-year low, on-chain data shows",t:"1d",tag:"bull"}]},
+ {s:"ETH",n:"Ethereum",sec:"Layer 1",a:"crypto",p:3184,c:-0.62,sig:"neu",cv:54,src:[
+   {so:"CoinDesk",h:"Staking yield compresses as validator queue grows",t:"6h",tag:"neu"},
+   {so:"The Block",h:"Layer-2 activity keeps mainnet fee revenue subdued",t:"1d",tag:"bear"}]}
+];
+
+function seedRand(str){
+  let h=0; for(let i=0;i<str.length;i++){ h=(h*31+str.charCodeAt(i))>>>0; }
+  return function(){ h^=h<<13; h^=h>>>17; h^=h<<5; h>>>=0; return (h%1000)/1000; };
+}
+function trendFor(d){
+  const r=seedRand(d.s), bias= d.sig==="bull"?1: d.sig==="bear"?-1:0;
+  let v=50, pts=[v];
+  for(let i=0;i<9;i++){ v += bias*(1.8+r()*2.6) + (r()-0.5)*4; pts.push(v); }
+  return pts;
+}
+function sparkSVG(d, w, h){
+  const pts=trendFor(d), min=Math.min(...pts), max=Math.max(...pts), range=(max-min)||1;
+  const step=w/(pts.length-1);
+  const path=pts.map((v,i)=> (i*step).toFixed(1)+","+ (h-2-((v-min)/range)*(h-4)).toFixed(1) ).join(" ");
+  const color = d.sig==="bull" ? "var(--bull)" : d.sig==="bear" ? "var(--bear)" : "var(--neu)";
+  return '<svg class="t-spark" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" aria-hidden="true">'+
+    '<polyline points="'+path+'" fill="none" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+function arrow(sig){ return sig==="bull" ? "▲" : sig==="bear" ? "▼" : "–"; }
+function sigWord(sig){ return sig==="bull" ? "Bullish" : sig==="bear" ? "Bearish" : "Neutral"; }
+function fmtChg(c){ return (c>=0?"+":"")+c.toFixed(2)+"%"; }
+function fmtPrice(p){ return p>=1000 ? p.toLocaleString(undefined,{maximumFractionDigits:0}) : p.toFixed(2); }
+function compose(d){
+  const b=d.src.filter(x=>x.tag==="bull").length, n=d.src.filter(x=>x.tag==="neu").length, r=d.src.filter(x=>x.tag==="bear").length;
+  return b+" bullish · "+n+" neutral · "+r+" bearish across "+d.src.length+" sources";
+}
+function synthesize(d){
+  const lead=d.src[0], mood = d.sig==="bull"?"leans bullish":d.sig==="bear"?"leans bearish":"is mixed";
+  return "Coverage this week "+mood+", anchored by “"+lead.h+".”";
+}
+function ttBars(cv){ const n=Math.max(0,Math.min(5,Math.round(cv/20))); return "▮".repeat(n)+"▯".repeat(5-n); }
+
+const state = {
+  terminal:{asset:"all", q:"", sort:"cv", dir:-1, starred:new Set()},
+  heatgrid:{asset:"all", q:"", sort:"cv", dir:-1},
+  tickertape:{asset:"all", q:"", sort:"cv", dir:-1},
+  focus:{asset:"all", q:"", sort:"cv", dir:-1}
+};
+
+function filterSort(list, opts){
+  let out = list.filter(d => opts.asset==="all" || d.a===opts.asset);
+  if(opts.q) out = out.filter(d => (d.s+" "+d.n).toLowerCase().includes(opts.q.toLowerCase()));
+  out = out.slice().sort((x,y)=> (x[opts.sort]-y[opts.sort]) * opts.dir);
+  return out;
+}
+
+/* ---------------- shared panel content ---------------- */
+function buildPanelHTML(d, extraTop){
+  return '<div class="p-head"><div><h2 class="p-sym">'+d.s+'</h2><div class="p-name">'+d.n+' · '+d.sec+'</div>'+
+      '<div class="p-price">'+fmtPrice(d.p)+' <span class="'+(d.c>=0?"pup":"pdown")+'">'+fmtChg(d.c)+'</span></div></div>'+
+      '<button class="p-close" aria-label="Close">✕</button></div>'+
+    (extraTop||'') +
+    '<div class="p-score-row">'+
+      '<div class="p-score-box"><div class="k">Signal</div><div class="v">'+sigWord(d.sig)+'</div></div>'+
+      '<div class="p-score-box"><div class="k">Conviction</div><div class="v">'+d.cv+' / 100</div></div>'+
+    '</div>'+
+    '<div class="p-comp">'+compose(d)+'</div>'+
+    '<div class="p-section-title">Sources</div>'+
+    d.src.map(s => (
+      '<div class="p-source"><div class="p-source-top"><span>'+s.so+' · '+s.t+' ago</span><span class="p-tag '+s.tag+'">'+sigWord(s.tag)+'</span></div>'+
+      '<div class="p-source-head">'+s.h+'</div></div>'
+    )).join("");
+}
+function openPanel(prefix, html){
+  document.getElementById(prefix+"-panel-body").innerHTML = html;
+  document.getElementById(prefix+"-backdrop").classList.add("open");
+  document.getElementById(prefix+"-panel").classList.add("open");
+  document.getElementById(prefix+"-panel").setAttribute("aria-hidden","false");
+  window.__activePanel = prefix;
+}
+function closeActivePanel(){
+  const p = window.__activePanel; if(!p) return;
+  document.getElementById(p+"-backdrop").classList.remove("open");
+  document.getElementById(p+"-panel").classList.remove("open");
+  document.getElementById(p+"-panel").setAttribute("aria-hidden","true");
+  window.__activePanel = null;
+}
+
+/* ---------------- TERMINAL render ---------------- */
+function renderMarquee(){
+  const items = DATA.map(d => '<span class="'+(d.c>=0?"up":"down")+'">'+d.s+" "+fmtChg(d.c)+"</span>").join("");
+  document.getElementById("t-marquee").innerHTML = items+items;
+}
+function renderTerminal(){
+  const st = state.terminal;
+  const rows = filterSort(DATA, st);
+  document.getElementById("t-rows").innerHTML = rows.map(d => (
+    '<tr class="t-row" data-sym="'+d.s+'">'+
+      '<td><button class="t-star'+(st.starred.has(d.s)?" on":"")+'" data-star="'+d.s+'" aria-label="Watch '+d.s+'">★</button></td>'+
+      '<td class="t-sym">'+d.s+'</td>'+
+      '<td class="t-name">'+d.n+'</td>'+
+      '<td class="num">'+fmtPrice(d.p)+'</td>'+
+      '<td class="num t-chg '+(d.c>=0?"up":"down")+'">'+fmtChg(d.c)+'</td>'+
+      '<td><span class="t-pill '+d.sig+'">'+arrow(d.sig)+' '+sigWord(d.sig).toUpperCase()+'</span></td>'+
+      '<td><div class="t-conv"><div class="t-conv-track"><div class="t-conv-fill" style="width:'+d.cv+'%"></div></div><span>'+d.cv+'</span></div></td>'+
+      '<td>'+sparkSVG(d,58,22)+'</td>'+
+    '</tr>'
+  )).join("");
+}
+function renderTerminalDetail(sym){
+  const d = DATA.find(x=>x.s===sym); if(!d) return;
+  document.getElementById("t-detail").innerHTML =
+    '<button class="t-back" data-back="terminal">← Back to scan</button>'+
+    '<div class="t-detail-head"><div><p class="t-dsym">'+d.s+'</p><div class="t-dname">'+d.n+' · '+d.sec+'</div></div>'+
+      '<div><div class="t-dprice">'+fmtPrice(d.p)+'</div><div class="t-chg '+(d.c>=0?"up":"down")+'" style="text-align:right">'+fmtChg(d.c)+'</div></div></div>'+
+    '<div class="t-score-row">'+
+      '<div class="t-score-box"><div class="k">Signal</div><div class="v"><span class="t-pill '+d.sig+'">'+arrow(d.sig)+' '+sigWord(d.sig).toUpperCase()+'</span></div></div>'+
+      '<div class="t-score-box"><div class="k">Conviction</div><div class="v">'+d.cv+' / 100</div></div>'+
+      '<div class="t-score-box"><div class="k">Sources</div><div class="v">'+d.src.length+'</div></div>'+
+    '</div>'+
+    '<div class="t-comp">'+compose(d)+'</div>'+
+    '<ul class="t-source-log">'+ d.src.map(s => (
+      '<li class="t-source"><div class="t-source-top"><span>'+s.so+' · '+s.t+' ago</span><span class="t-pill '+s.tag+'">'+sigWord(s.tag).toUpperCase()+'</span></div>'+
+      '<div class="t-source-head">'+s.h+'</div></li>'
+    )).join("") + '</ul>';
+}
+function showDetail(design){
+  document.querySelector('.design-'+design+' [data-view="list"]').hidden = true;
+  document.querySelector('.design-'+design+' [data-view="detail"]').hidden = false;
+}
+function showList(design){
+  document.querySelector('.design-'+design+' [data-view="list"]').hidden = false;
+  document.querySelector('.design-'+design+' [data-view="detail"]').hidden = true;
+}
+
+/* ---------------- HEAT GRID render ---------------- */
+function renderHeatGrid(){
+  const st = state.heatgrid;
+  const rows = filterSort(DATA, st);
+  document.getElementById("hg-grid").innerHTML = rows.map(d => (
+    '<div class="hg-tile sig-'+d.sig+'" data-sym="'+d.s+'">'+
+      '<div class="hg-tile-top"><span class="hg-sym">'+d.s+'</span><span class="hg-arrow">'+arrow(d.sig)+'</span></div>'+
+      '<div class="hg-tile-mid"><svg class="hg-ring" viewBox="0 0 36 36" aria-hidden="true">'+
+        '<circle class="hg-ring-track" cx="18" cy="18" r="15.5"/>'+
+        '<circle class="hg-ring-fill" cx="18" cy="18" r="15.5" style="stroke-dasharray:'+(d.cv/100*97.4).toFixed(1)+' 97.4"/>'+
+      '</svg><span class="hg-cv">'+d.cv+'</span></div>'+
+      '<div class="hg-tile-bottom"><span class="hg-price">'+fmtPrice(d.p)+'</span><span class="hg-chg '+(d.c>=0?"up":"down")+'">'+fmtChg(d.c)+'</span></div>'+
+    '</div>'
+  )).join("");
+}
+
+/* ---------------- TICKER TAPE render ---------------- */
+function renderTickerTape(){
+  const st = state.tickertape;
+  const rows = filterSort(DATA, st);
+  document.getElementById("tt-rows").innerHTML = rows.map(d => (
+    '<div class="tt-line" data-sym="'+d.s+'"><span class="tt-caret">»</span><span class="tt-sym">'+d.s+'</span>'+
+    '<span class="tt-name">'+d.n+'</span>'+
+    '<span class="tt-price">'+fmtPrice(d.p)+'</span>'+
+    '<span class="tt-chg '+(d.c>=0?"up":"down")+'">'+fmtChg(d.c)+'</span>'+
+    '<span class="tt-dots '+d.sig+'">'+ttBars(d.cv)+'</span></div>'
+  )).join("");
+}
+
+/* ---------------- FOCUS render ---------------- */
+function renderFocus(){
+  const st = state.focus;
+  const rows = filterSort(DATA, st);
+  document.getElementById("fc-rows").innerHTML = rows.map(d => (
+    '<div class="fc-row" data-sym="'+d.s+'">'+
+      '<div class="fc-row-main"><div class="fc-sym">'+d.s+'</div><div class="fc-name">'+d.n+'</div></div>'+
+      '<div class="fc-signal"><span class="fc-dot '+d.sig+'"></span>'+sigWord(d.sig)+'</div>'+
+      '<div class="fc-meter"><div class="fc-meter-track"><div class="fc-meter-fill" style="width:'+d.cv+'%"></div></div></div>'+
+      '<div class="fc-price-col"><div class="fc-price">'+fmtPrice(d.p)+'</div><div class="fc-chg '+(d.c>=0?"up":"down")+'">'+fmtChg(d.c)+'</div></div>'+
+    '</div>'
+  )).join("");
+}
+
+const RENDER = { terminal:renderTerminal, heatgrid:renderHeatGrid, tickertape:renderTickerTape, focus:renderFocus };
+
+/* ---------------- wiring ---------------- */
+document.addEventListener("click", function(e){
+  if(e.target.closest(".p-close")){ closeActivePanel(); return; }
+  if(e.target.classList.contains("panel-backdrop")){ closeActivePanel(); return; }
+
+  const star = e.target.closest("[data-star]");
+  if(star){
+    const design = star.closest(".design").dataset.design;
+    const sym = star.dataset.star, st = state[design];
+    st.starred.has(sym) ? st.starred.delete(sym) : st.starred.add(sym);
+    RENDER[design]();
+    return;
+  }
+  const row = e.target.closest("[data-sym]");
+  if(row && !e.target.closest("[data-star]")){
+    const design = row.closest(".design").dataset.design, sym = row.dataset.sym;
+    const d = DATA.find(x=>x.s===sym);
+    if(design==="terminal"){ renderTerminalDetail(sym); showDetail("terminal"); }
+    else if(design==="heatgrid"){ openPanel("heatgrid", buildPanelHTML(d)); }
+    else if(design==="tickertape"){ openPanel("tickertape", '<div class="tt-torn"></div>'+buildPanelHTML(d)); }
+    else if(design==="focus"){ openPanel("focus", buildPanelHTML(d, '<p class="fc-summary">'+synthesize(d)+'</p>')); }
+    return;
+  }
+  const back = e.target.closest("[data-back]");
+  if(back){ showList(back.dataset.back); return; }
+
+  const assetBtn = e.target.closest("[data-asset]");
+  if(assetBtn){
+    const design = assetBtn.closest(".design").dataset.design;
+    state[design].asset = assetBtn.dataset.asset;
+    assetBtn.parentElement.querySelectorAll("[data-asset]").forEach(b=>b.classList.remove("active"));
+    assetBtn.classList.add("active");
+    RENDER[design]();
+    return;
+  }
+  const sortTh = e.target.closest("[data-sort]");
+  if(sortTh){
+    const design = sortTh.closest(".design").dataset.design, st = state[design];
+    st.dir = (st.sort===sortTh.dataset.sort) ? -st.dir : -1;
+    st.sort = sortTh.dataset.sort;
+    RENDER[design]();
+    return;
+  }
+});
+document.addEventListener("keydown", function(e){ if(e.key==="Escape") closeActivePanel(); });
+
+document.getElementById("hg-search").addEventListener("input", function(e){ state.heatgrid.q = e.target.value; renderHeatGrid(); });
+document.getElementById("tt-search").addEventListener("input", function(e){ state.tickertape.q = e.target.value; renderTickerTape(); });
+document.getElementById("fc-search").addEventListener("input", function(e){ state.focus.q = e.target.value; renderFocus(); });
+
+document.querySelectorAll(".switch-btn").forEach(btn=>{
+  btn.addEventListener("click", function(){
+    closeActivePanel();
+    document.querySelectorAll(".switch-btn").forEach(b=>{ b.classList.remove("active"); b.setAttribute("aria-selected","false"); });
+    btn.classList.add("active"); btn.setAttribute("aria-selected","true");
+    document.querySelectorAll(".design").forEach(s=> s.hidden = s.dataset.design !== btn.dataset.target );
+    const subs = { terminal:"Terminal — dense phosphor-amber trading desk, built for scanning many tickers fast.",
+                   heatgrid:"Heat Grid — dark sensor-array HUD: a tile grid where glow marks conviction and edge color marks direction.",
+                   tickertape:"Ticker Tape — mechanical paper-tape wire feed, black/green/red ink, a nod to the original stock ticker.",
+                   focus:"Focus — quiet, spacious consumer app with a plain-language read-out on every signal." };
+    document.getElementById("switcher-sub").innerHTML = subs[btn.dataset.target];
+  });
+});
+
+renderMarquee(); renderTerminal(); renderHeatGrid(); renderTickerTape(); renderFocus();
+})();
+</script>

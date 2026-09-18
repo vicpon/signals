@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Signals</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,500;0,600;1,500&family=Manrope:wght@500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+:root{
+  --p-bg:#f2f4f7; --p-surface:#ffffff; --p-border:#e3e7ee; --p-text:#151a23; --p-dim:#68707e;
+  --p-font-display:"Newsreader",Georgia,"Times New Roman",serif; --p-font-body:"Manrope",-apple-system,BlinkMacSystemFont,sans-serif; --p-font-mono:"IBM Plex Mono",monospace;
+  --p-radius:14px;
+  --p-bull:#1f8a4c; --p-bull-tint:rgba(31,138,76,.10);
+  --p-bear:#c3453a; --p-bear-tint:rgba(195,69,58,.10);
+  --p-neu:#767f8f; --p-neu-tint:rgba(118,127,143,.10);
+  --fc-accent:#0e6f66;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --p-bg:#12161d; --p-surface:#1a1f28; --p-border:#2a3040; --p-text:#eef1f6; --p-dim:#9aa2b2;
+    --p-bull:#4ade80; --p-bull-tint:rgba(74,222,128,.14);
+    --p-bear:#f87171; --p-bear-tint:rgba(248,113,113,.14);
+    --p-neu:#a4acc0; --p-neu-tint:rgba(164,172,192,.14);
+    --fc-accent:#2dd4c4;
+  }
+}
+:root[data-theme="dark"]{
+  --p-bg:#12161d; --p-surface:#1a1f28; --p-border:#2a3040; --p-text:#eef1f6; --p-dim:#9aa2b2;
+  --p-bull:#4ade80; --p-bull-tint:rgba(74,222,128,.14);
+  --p-bear:#f87171; --p-bear-tint:rgba(248,113,113,.14);
+  --p-neu:#a4acc0; --p-neu-tint:rgba(164,172,192,.14);
+  --fc-accent:#2dd4c4;
+}
+*{box-sizing:border-box;}
+body{background:var(--p-bg);color:var(--p-text);margin:0;font-family:var(--p-font-body);}
+[hidden]{display:none !important;}
+
+.fc-wrap{ max-width:640px; margin:0 auto; padding:2.1rem 1.2rem 4rem; }
+.fc-title{ font-family:var(--p-font-display); font-size:1.85rem; font-weight:600; margin:0; letter-spacing:-.01em; }
+.fc-title small{ display:block; font-family:var(--p-font-body); font-weight:600; font-size:.7rem; color:var(--p-dim); text-transform:uppercase; letter-spacing:.08em; margin-top:.45rem; }
+.fc-toolbar{ display:flex; gap:.5rem; margin:1.3rem 0 1.5rem; flex-wrap:wrap; align-items:center; }
+.fc-search{ font:500 .85rem/1 var(--p-font-body); background:var(--p-surface); border:1px solid var(--p-border); border-radius:10px; padding:.55rem .8rem; color:var(--p-text); flex:1; min-width:160px; }
+.fc-search::placeholder{ color:var(--p-dim); }
+.fc-chip-row{ display:flex; gap:.4rem; }
+.fc-chip{ font:600 .76rem/1 var(--p-font-body); background:var(--p-surface); border:1px solid var(--p-border); color:var(--p-dim); border-radius:999px; padding:.45rem .85rem; cursor:pointer; }
+.fc-chip.active{ background:var(--fc-accent); color:#fff; border-color:var(--fc-accent); }
+.fc-list{ display:flex; flex-direction:column; }
+.fc-row{ display:flex; align-items:center; gap:.9rem; padding:.9rem .5rem; border-bottom:1px solid var(--p-border); cursor:pointer; border-radius:10px; }
+.fc-row:last-child{ border-bottom:none; }
+.fc-row:hover{ background:var(--p-surface); }
+.fc-row-main{ flex:1; min-width:0; }
+.fc-sym{ font-family:var(--p-font-display); font-size:1.05rem; font-weight:600; }
+.fc-name{ color:var(--p-dim); font-size:.8rem; margin-top:.1rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fc-signal{ display:flex; align-items:center; gap:.4rem; font:600 .74rem/1 var(--p-font-body); color:var(--p-dim); min-width:88px; }
+.fc-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
+.fc-dot.bull{ background:var(--p-bull); } .fc-dot.bear{ background:var(--p-bear); } .fc-dot.neu{ background:var(--p-neu); }
+.fc-meter{ width:60px; flex:none; }
+.fc-meter-track{ height:3px; background:var(--p-border); border-radius:2px; overflow:hidden; }
+.fc-meter-fill{ height:100%; background:var(--fc-accent); }
+.fc-price-col{ text-align:right; min-width:84px; flex:none; }
+.fc-price{ font-family:var(--p-font-display); font-size:1.05rem; font-style:italic; }
+.fc-chg{ font-size:.78rem; font-variant-numeric:tabular-nums; }
+.fc-chg.up{ color:var(--p-bull); } .fc-chg.down{ color:var(--p-bear); }
+.fc-foot{ text-align:center; font-size:.78rem; color:var(--p-dim); margin-top:1.2rem; }
+.fc-summary{ font-size:.92rem; line-height:1.6; color:var(--p-text); background:var(--p-surface); border:1px solid var(--p-border); border-radius:var(--p-radius); padding:.85rem 1rem; margin:0 0 1.2rem; font-style:italic; }
+
+.panel-backdrop{ position:fixed; inset:0; background:rgba(8,10,16,.44); opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:399; }
+.panel-backdrop.open{ opacity:1; pointer-events:auto; }
+.panel{
+  position:fixed; top:0; right:0; height:100%; width:min(440px,100%);
+  background:var(--p-bg); color:var(--p-text); border-left:1px solid var(--p-border);
+  font-family:var(--p-font-body); transform:translateX(100%); transition:transform .24s ease;
+  z-index:400; overflow-y:auto;
+}
+.panel.open{ transform:translateX(0); }
+.panel-inner{ padding:1.3rem 1.2rem 3rem; }
+.p-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:.6rem; margin-bottom:1rem; }
+.p-sym{ font-family:var(--p-font-display); font-size:1.55rem; font-weight:700; margin:0; }
+.p-name{ color:var(--p-dim); font-size:.82rem; margin-top:.15rem; }
+.p-price{ font-family:var(--p-font-mono); font-size:1.05rem; margin-top:.4rem; font-variant-numeric:tabular-nums; }
+.pup{ color:var(--p-bull); } .pdown{ color:var(--p-bear); }
+.p-close{ background:var(--p-surface); border:1px solid var(--p-border); color:var(--p-text); width:30px; height:30px; border-radius:8px; cursor:pointer; flex:none; }
+.p-score-row{ display:flex; gap:.6rem; margin:1rem 0 1.2rem; }
+.p-score-box{ flex:1; background:var(--p-surface); border:1px solid var(--p-border); border-radius:var(--p-radius,10px); padding:.65rem .8rem; }
+.p-score-box .k{ font-size:.64rem; text-transform:uppercase; letter-spacing:.06em; color:var(--p-dim); font-weight:700; }
+.p-score-box .v{ font-size:1.1rem; font-weight:800; margin-top:.15rem; font-family:var(--p-font-display); }
+.p-comp{ font-size:.82rem; color:var(--p-dim); margin-bottom:1.1rem; }
+.p-section-title{ font:700 .68rem/1 inherit; letter-spacing:.08em; text-transform:uppercase; color:var(--p-dim); margin-bottom:.6rem; }
+.p-source{ border:1px solid var(--p-border); border-radius:var(--p-radius,10px); padding:.75rem .85rem; margin-bottom:.6rem; background:var(--p-surface); }
+.p-source-top{ display:flex; justify-content:space-between; gap:.5rem; font-size:.7rem; color:var(--p-dim); margin-bottom:.3rem; }
+.p-source-head{ font-size:.86rem; line-height:1.45; }
+.p-tag{ display:inline-flex; align-items:center; gap:.3rem; font:700 .68rem/1 inherit; padding:.28rem .55rem; border-radius:999px; flex:none; }
+.p-tag.bull{ color:var(--p-bull); background:var(--p-bull-tint); }
+.p-tag.bear{ color:var(--p-bear); background:var(--p-bear-tint); }
+.p-tag.neu{ color:var(--p-neu); background:var(--p-neu-tint); }
+
+.fc-status{ text-align:center; color:var(--p-dim); padding:2rem 0; font-size:.9rem; }
+
+@media (max-width:520px){ .fc-meter{ display:none; } }
+</style>
+</head>
+<body>
+
+<main class="fc-wrap">
+  <h1 class="fc-title">Today's signals<small>Stocks &amp; crypto · news + filings, judged by Jev</small></h1>
+  <div class="fc-toolbar">
+    <input class="fc-search" id="fc-search" placeholder="Search a symbol or company…" />
+    <div class="fc-chip-row" id="fc-assets">
+      <button class="fc-chip active" data-asset="all">All</button>
+      <button class="fc-chip" data-asset="stock">Equities</button>
+      <button class="fc-chip" data-asset="crypto">Crypto</button>
+    </div>
+  </div>
+  <div id="fc-status" class="fc-status" hidden></div>
+  <div class="fc-list" id="fc-rows"></div>
+  <div class="fc-foot" id="fc-foot"></div>
+</main>
+
+<div class="panel-backdrop" id="focus-backdrop"></div>
+<div class="panel" id="focus-panel" role="dialog" aria-label="Signal detail" aria-hidden="true">
+  <div class="panel-inner" id="focus-panel-body"></div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+let DATA = [];
+let generatedAt = null;
+const state = { asset: "all", q: "" };
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+function el(tag, props, ...children){
+  const node = document.createElement(tag);
+  if (props) for (const [k, v] of Object.entries(props)) {
+    if (k === "class") node.className = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v);
+  }
+  for (const child of children) {
+    if (child == null) continue;
+    node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
+  }
+  return node;
+}
+
+function arrow(sig){ return sig==="bull" ? "▲" : sig==="bear" ? "▼" : "–"; }
+function sigWord(sig){ return sig==="bull" ? "Bullish" : sig==="bear" ? "Bearish" : "Neutral"; }
+function fmtChg(c){ return (c>=0?"+":"")+c.toFixed(2)+"%"; }
+function fmtPrice(p){ return p>=1000 ? p.toLocaleString(undefined,{maximumFractionDigits:0}) : p.toFixed(2); }
+
+function filterSort(list){
+  let out = list.filter(d => state.asset==="all" || d.a===state.asset);
+  if (state.q) out = out.filter(d => (d.s+" "+d.n).toLowerCase().includes(state.q.toLowerCase()));
+  return out.slice().sort((x,y)=> y.cv - x.cv);
+}
+
+// All externally-sourced text (headlines, outlet names, company names from
+// third-party quote data) goes through escapeHtml() before it touches
+// innerHTML — this dashboard renders live news, so that text is untrusted.
+function buildPanelHTML(d){
+  const sourcesHtml = d.src.map(s => (
+    '<div class="p-source"><div class="p-source-top"><span>'+escapeHtml(s.so)+' · '+escapeHtml(s.t)+' ago</span>'+
+    '<span class="p-tag '+s.tag+'">'+sigWord(s.tag)+'</span></div>'+
+    '<div class="p-source-head">'+escapeHtml(s.h)+'</div></div>'
+  )).join("");
+  return '<div class="p-head"><div><h2 class="p-sym">'+escapeHtml(d.s)+'</h2><div class="p-name">'+escapeHtml(d.n)+' · '+escapeHtml(d.sec)+'</div>'+
+      '<div class="p-price">'+fmtPrice(d.p)+' <span class="'+(d.c>=0?"pup":"pdown")+'">'+fmtChg(d.c)+'</span></div></div>'+
+      '<button class="p-close" aria-label="Close">✕</button></div>'+
+    '<p class="fc-summary">'+escapeHtml(d.summary || "")+'</p>'+
+    '<div class="p-score-row">'+
+      '<div class="p-score-box"><div class="k">Signal</div><div class="v">'+sigWord(d.sig)+'</div></div>'+
+      '<div class="p-score-box"><div class="k">Conviction</div><div class="v">'+d.cv+' / 100</div></div>'+
+    '</div>'+
+    '<div class="p-section-title">Sources</div>'+
+    (sourcesHtml || '<div class="p-comp">No sources found for this ticker.</div>');
+}
+function openPanel(html){
+  document.getElementById("focus-panel-body").innerHTML = html;
+  document.getElementById("focus-backdrop").classList.add("open");
+  document.getElementById("focus-panel").classList.add("open");
+  document.getElementById("focus-panel").setAttribute("aria-hidden","false");
+}
+function closePanel(){
+  document.getElementById("focus-backdrop").classList.remove("open");
+  document.getElementById("focus-panel").classList.remove("open");
+  document.getElementById("focus-panel").setAttribute("aria-hidden","true");
+}
+
+function renderRow(d){
+  const main = el("div", { class: "fc-row-main" },
+    el("div", { class: "fc-sym" }, d.s),
+    el("div", { class: "fc-name" }, d.n),
+  );
+  const signal = el("div", { class: "fc-signal" },
+    el("span", { class: "fc-dot " + d.sig }),
+    sigWord(d.sig),
+  );
+  const meterFill = el("div", { class: "fc-meter-fill" });
+  meterFill.style.width = d.cv + "%";
+  const meter = el("div", { class: "fc-meter" }, el("div", { class: "fc-meter-track" }, meterFill));
+  const priceCol = el("div", { class: "fc-price-col" },
+    el("div", { class: "fc-price" }, fmtPrice(d.p)),
+    el("div", { class: "fc-chg " + (d.c>=0?"up":"down") }, fmtChg(d.c)),
+  );
+  const row = el("div", { class: "fc-row", "data-sym": d.s, onclick: () => openPanel(buildPanelHTML(d)) },
+    main, signal, meter, priceCol,
+  );
+  return row;
+}
+
+function render(){
+  const rows = filterSort(DATA);
+  const list = document.getElementById("fc-rows");
+  list.replaceChildren(...rows.map(renderRow));
+  document.getElementById("fc-foot").textContent =
+    generatedAt ? `Showing ${rows.length} of ${DATA.length} — updated ${new Date(generatedAt).toLocaleString()}` : "";
+}
+
+function setStatus(msg){
+  const box = document.getElementById("fc-status");
+  if (!msg) { box.hidden = true; return; }
+  box.hidden = false;
+  box.textContent = msg;
+}
+
+async function load(){
+  setStatus("Loading signals…");
+  try {
+    const res = await fetch("/api/signals");
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || (res.status + " " + res.statusText));
+    }
+    const payload = await res.json();
+    DATA = payload.tickers || [];
+    generatedAt = payload.generatedAt;
+    setStatus(DATA.length ? "" : "No tickers in the latest run.");
+    render();
+  } catch (err) {
+    setStatus("Couldn't load signals: " + err.message);
+  }
+}
+
+document.getElementById("focus-panel-body").addEventListener("click", (e) => {
+  if (e.target.closest(".p-close")) closePanel();
+});
+document.getElementById("focus-backdrop").addEventListener("click", closePanel);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePanel(); });
+
+document.getElementById("fc-search").addEventListener("input", (e) => { state.q = e.target.value; render(); });
+document.getElementById("fc-assets").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-asset]");
+  if (!btn) return;
+  state.asset = btn.dataset.asset;
+  document.querySelectorAll("#fc-assets [data-asset]").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  render();
+});
+
+load();
+})();
+</script>
+</body>
+</html>
