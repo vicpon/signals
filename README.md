@@ -123,10 +123,14 @@ for reading the results honestly:**
 Also worth knowing before running this: **OpenAI is a paid API**, unlike
 every other integration in this project. It's opt-in for exactly that
 reason. Enabling it roughly doubles per-article judgment calls (one to Jev,
-one to OpenAI) and their cost/latency. `OPENAI_MODEL` (`.env`) picks the
-model — OpenAI's model lineup moves fast, so check their current docs for
-the current fast/cheap option rather than trusting the shipped default to
-still be current.
+one to OpenAI) and their cost/latency. `OPENAI_MODEL` (`.env`) defaults to
+OpenAI's flagship model (`gpt-6-astra` at the time of writing — verified
+against their live docs, not guessed) rather than a cheap/fast tier: the
+point of this comparison is Jev (cheap, fast, purpose-built for narrow
+judgments) against OpenAI's strongest general-purpose model, not a
+same-cost-tier matchup. OpenAI's model lineup moves fast, so check their
+current docs before trusting this default to still be current, and swap in
+a cheaper model via `.env` if cost matters more than the strongest showing.
 
 ### Running it
 
