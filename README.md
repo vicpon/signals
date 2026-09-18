@@ -53,20 +53,38 @@ list. It fetches live data from `/api/signals` (backed by
           tag /* 'bull'|'bear'|'neu' */ }] }
 ```
 
-## Real pipeline — built, free/keyless data sources only
+## Real pipeline — built, free data sources only
 
-Everything except the Jev calls runs against free, keyless public endpoints
-— no paid API tier and nothing that requires an account, so the project
-stays runnable by anyone who clones it and adds only a TypeSafe key.
+Everything except Jev and (optionally) Reddit runs against fully free,
+keyless public endpoints — no paid tier, no account. Reddit's anonymous
+read API was retired (confirmed: anonymous requests now get a login-wall
+403), so it needs a free OAuth app instead — see below.
 
 - **Stock quotes**: Yahoo Finance's public chart endpoint
   (`query1.finance.yahoo.com/v8/finance/chart/<TICKER>`).
 - **Crypto quotes**: CoinGecko's public `/simple/price` endpoint.
 - **News**: Google News RSS search per company (`news.google.com/rss/search`).
+- **Seeking Alpha** (`src/sources/seekingAlpha.js`): per-symbol RSS
+  (`seekingalpha.com/api/sa/combined/<TICKER>.xml`), stocks only. Their feed
+  description restricts it to "personal, non-commercial use" — worth
+  re-checking if this project is ever deployed for others rather than run
+  locally.
+- **Reddit** (`src/sources/reddit.js`, optional): r/stocks or
+  r/CryptoCurrency search via `oauth.reddit.com`. Requires a free "script"
+  app (`reddit.com/prefs/apps` → `REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET`
+  in `.env`) using the OAuth2 client-credentials grant — no user password
+  needed. Skipped entirely if those vars are unset.
 - **Filings**: SEC's own `data.sec.gov/submissions/CIK…` API, resolved from
-  the official `company_tickers.json` ticker→CIK map. SEC's fair-access
-  policy requires a descriptive `User-Agent` (not a secret) — set
-  `SEC_USER_AGENT` in `.env` before running the pipeline.
+  the official `company_tickers.json` ticker→CIK map. Form 4s (insider
+  trades) get their actual transaction detail fetched and summarized —
+  e.g. "Jane Doe (CFO) net disposed of 12,000 shares (open-market sale)" —
+  instead of just "a Form 4 was filed" (`src/sources/secFilings.js`). SEC's
+  fair-access policy requires a descriptive `User-Agent` (not a secret) —
+  set `SEC_USER_AGENT` in `.env`.
+- **Tried and dropped**: MarketWatch and Reuters no longer expose free
+  per-ticker RSS (tested live: MarketWatch's redirects to a 404, Reuters'
+  feed 301s to a dead endpoint); CNBC's RSS is general business news, not
+  per-company, so it wasn't useful for this per-ticker pipeline.
 - **Judgment engine**: TypeSafe/Jev, called server-side only
   (`src/judge.js`). Per article, one `systemOne` request asks three
   independent questions — a `Choice` for sentiment direction (bull/bear/
@@ -81,6 +99,10 @@ stays runnable by anyone who clones it and adds only a TypeSafe key.
   deterministically in code from the aggregated judgments (majority signal,
   agreement ratio, and the highest-confidence anchor headline) — see
   `synthesize`-equivalent logic in `src/aggregate.js`.
+
+Per ticker, all sources are merged and capped at `MAX_ARTICLES_PER_TICKER`
+(8, most-recent-first) before any Jev calls — adding sources broadens what's
+considered without letting per-ticker Jev cost grow unbounded.
 
 ### Running it
 
@@ -97,9 +119,11 @@ Re-run `npm run pipeline` on a schedule (e.g. cron) to refresh it; the
 server itself is read-only and never triggers the pipeline, so it never
 spends TypeSafe/API quota on its own.
 
-The ticker universe (`src/config.js`) is a curated ~15 names, not the full
-100, so a first run stays fast and light on the free/rate-limited sources
-above — extend the list there when ready to scale up.
+The ticker universe (`src/config.js`) is a curated ~110 names across
+sectors (stocks + crypto) — a hand-picked list, not a live top-100-by-
+market-cap ranking. A full run makes several HTTP calls and up to 8 Jev
+calls per ticker, so it takes a while (tens of minutes) and uses real Jev
+quota; trim `TICKERS` for faster/cheaper iteration while developing.
 
 ### Security notes
 
@@ -115,9 +139,8 @@ above — extend the list there when ready to scale up.
 
 ## Not yet built (next steps discussed)
 
-- Scaling the ticker list from ~15 toward the full top-100
-- Signal-credibility weighting (a Reuters headline vs. an anonymous forum
-  post currently count equally) — flagged as a risk, not yet addressed
-- Social-media source ingestion (news + filings are covered; social is not)
+- Signal-credibility weighting (a Seeking Alpha article vs. a Reddit post
+  currently count equally in the aggregation) — flagged as a risk, not yet
+  addressed
 - Other feature ideas raised but not built: alerts on signal flips,
   backtested accuracy per ticker, sector heatmap, multi-timeframe signals
