@@ -35,19 +35,24 @@ outlet names) is HTML-escaped before rendering (see Security notes).
 
 ```js
 { s, n, sec, a /* 'stock'|'crypto' */, p /* price */, c /* %chg */,
-  sig /* 'bull'|'bear'|'neu' */, cv /* 0-100 conviction */,
-  summary /* one-line plain-English readout, code-composed — see below */,
-  regulatoryFlag /* true if any source trips the regulatory Noul */,
+  jev: { sig /* 'bull'|'bear'|'neu' */, cv /* 0-100 conviction */,
+         summary /* one-line plain-English readout, code-composed */,
+         regulatoryFlag /* true if any source trips the regulatory Noul */ },
+  openai: /* same shape as `jev`, or null if OPENAI_API_KEY is unset */,
   src: [{ so /* source name */, h /* headline */, t /* time-ago */,
-          tag /* 'bull'|'bear'|'neu' */ }] }
+          jevTag /* 'bull'|'bear'|'neu' */, openaiTag /* same, or null */ }] }
 ```
+
+`jev` and `openai` are two independent aggregations of judgments over the
+*same* `src` list — see "TypeSafe vs OpenAI comparison" below.
 
 ## Real pipeline — built, free data sources only
 
-Everything except Jev and (optionally) Reddit runs against fully free,
-keyless public endpoints — no paid tier, no account. Reddit's anonymous
-read API was retired (confirmed: anonymous requests now get a login-wall
-403), so it needs a free OAuth app instead — see below.
+Everything except Jev, the optional OpenAI comparison, and (optionally)
+Reddit runs against fully free, keyless public endpoints — no paid tier, no
+account. Reddit's anonymous read API was retired (confirmed: anonymous
+requests now get a login-wall 403), so it needs a free OAuth app instead —
+see below.
 
 - **Stock quotes**: Yahoo Finance's public chart endpoint
   (`query1.finance.yahoo.com/v8/finance/chart/<TICKER>`).
@@ -93,11 +98,42 @@ Per ticker, all sources are merged and capped at `MAX_ARTICLES_PER_TICKER`
 (8, most-recent-first) before any Jev calls — adding sources broadens what's
 considered without letting per-ticker Jev cost grow unbounded.
 
+## TypeSafe vs OpenAI comparison (optional)
+
+Set `OPENAI_API_KEY` in `.env` to also judge every article with an OpenAI
+model (`src/judgeOpenAI.js`), so each ticker gets two independently
+aggregated views over the *identical* source list — the dashboard shows
+both, tags disagreements, and the detail panel shows each engine's own
+summary and per-source tags. Unset, `openai` is simply `null` everywhere
+and the dashboard shows Jev's result only.
+
+**This is not an apples-to-apples methodology comparison, and that matters
+for reading the results honestly:**
+
+- TypeSafe's `Choice`/`Score` return a real probability distribution from a
+  model architected specifically to produce calibrated judgments — that's
+  the whole "System One" design.
+- The OpenAI side is a general chat model given a system prompt describing
+  the same three questions (sentiment / conviction level / regulatory
+  probability) via structured outputs (`openai.responses.parse` +
+  `zodTextFormat`), and asked to *self-report* its own confidence in a JSON
+  field. That's an introspective guess, not a distribution — treat OpenAI's
+  "confidence" as a materially weaker signal than Jev's.
+
+Also worth knowing before running this: **OpenAI is a paid API**, unlike
+every other integration in this project. It's opt-in for exactly that
+reason. Enabling it roughly doubles per-article judgment calls (one to Jev,
+one to OpenAI) and their cost/latency. `OPENAI_MODEL` (`.env`) picks the
+model — OpenAI's model lineup moves fast, so check their current docs for
+the current fast/cheap option rather than trusting the shipped default to
+still be current.
+
 ### Running it
 
 ```sh
 npm install
 cp .env.example .env   # add your TYPESAFE_API_KEY and SEC_USER_AGENT
+                         # (optionally OPENAI_API_KEY for the comparison)
 npm run pipeline        # fetches quotes/news/filings, judges via Jev,
                          # writes data/signals.json
 npm start                # serves the dashboard + /api/signals
@@ -116,10 +152,11 @@ quota; trim `TICKERS` for faster/cheaper iteration while developing.
 
 ### Security notes
 
-- `TYPESAFE_API_KEY` is read from the environment (`.env`, git-ignored) and
-  never sent to or read by the browser — `TypeSafeClient` itself refuses to
-  run in a browser context, which matches this architecture: all Jev calls
-  live in `src/judge.js` on the server.
+- `TYPESAFE_API_KEY` and `OPENAI_API_KEY` are read from the environment
+  (`.env`, git-ignored) and never sent to or read by the browser —
+  `TypeSafeClient` itself refuses to run in a browser context, which
+  matches this architecture: all model calls (`src/judge.js`,
+  `src/judgeOpenAI.js`) live on the server.
 - News headlines and outlet names are live, external, untrusted text. The
   dashboard (`public/index.html`) HTML-escapes every externally-sourced
   string before it touches `innerHTML`.

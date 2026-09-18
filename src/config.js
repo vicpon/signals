@@ -158,4 +158,13 @@ export const REDDIT_USER_AGENT =
 
 export const TYPESAFE_API_KEY = process.env.TYPESAFE_API_KEY;
 
+// Optional comparison engine: judges the exact same articles as Jev, using
+// the same output shape, so the two can be compared side by side. Unlike
+// everything else in this project, OpenAI is a paid API — this path is
+// opt-in and skipped entirely if unset. Model naming moves fast; check
+// OpenAI's current docs for their current fast/cheap model and override
+// via .env rather than trusting this default to still be current.
+export const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+export const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+
 export const CACHE_PATH = new URL("../data/signals.json", import.meta.url);

@@ -12,7 +12,8 @@ import { getSeekingAlphaNews } from "./sources/seekingAlpha.js";
 import { getRedditPosts } from "./sources/reddit.js";
 import { getRecentFilings } from "./sources/secFilings.js";
 import { judgeArticle } from "./judge.js";
-import { aggregateTicker } from "./aggregate.js";
+import { judgeArticleOpenAI, OPENAI_ENABLED } from "./judgeOpenAI.js";
+import { buildTickerRecord } from "./aggregate.js";
 import { writeCache } from "./cache.js";
 import { sleep } from "./lib/httpJson.js";
 
@@ -41,6 +42,33 @@ async function gatherArticles(tickerMeta) {
   return [...filings, ...news, ...seekingAlpha, ...reddit];
 }
 
+// Judges one article with both engines independently — a failure in one
+// (e.g. an OpenAI rate limit) never blocks the other from being recorded.
+async function judgeWithBothEngines(tickerMeta, article) {
+  const input = {
+    ticker: tickerMeta.s,
+    company: tickerMeta.n,
+    headline: article.headline,
+    source: article.source,
+  };
+
+  try {
+    article.jevJudgment = await judgeArticle(input);
+  } catch (err) {
+    console.warn(`[pipeline] Jev judgment failed for ${tickerMeta.s} article "${article.headline}": ${err.message}`);
+  }
+
+  if (OPENAI_ENABLED) {
+    try {
+      article.openaiJudgment = await judgeArticleOpenAI(input);
+    } catch (err) {
+      console.warn(`[pipeline] OpenAI judgment failed for ${tickerMeta.s} article "${article.headline}": ${err.message}`);
+    }
+  }
+
+  return article;
+}
+
 async function gatherForTicker(tickerMeta) {
   const quote =
     tickerMeta.a === "crypto"
@@ -51,38 +79,32 @@ async function gatherForTicker(tickerMeta) {
     .sort((a, b) => b.publishedAt - a.publishedAt)
     .slice(0, MAX_ARTICLES_PER_TICKER);
 
-  const judged = [];
   for (const article of articles) {
-    try {
-      const judgment = await judgeArticle({
-        ticker: tickerMeta.s,
-        company: tickerMeta.n,
-        headline: article.headline,
-        source: article.source,
-      });
-      judged.push({ ...article, judgment });
-    } catch (err) {
-      console.warn(`[pipeline] Jev judgment failed for ${tickerMeta.s} article "${article.headline}": ${err.message}`);
-    }
+    await judgeWithBothEngines(tickerMeta, article);
   }
 
-  return aggregateTicker(tickerMeta, quote, judged);
+  return buildTickerRecord(tickerMeta, quote, articles, { openaiEnabled: OPENAI_ENABLED });
 }
 
 export async function runPipeline() {
+  if (OPENAI_ENABLED) {
+    console.log("[pipeline] OpenAI comparison enabled — this doubles per-article judgment calls and cost.");
+  }
+
   const results = [];
   for (const tickerMeta of TICKERS) {
     try {
       const record = await gatherForTicker(tickerMeta);
       results.push(record);
-      console.log(`[pipeline] ${tickerMeta.s}: ${record.sig} (conviction ${record.cv}, ${record.src.length} sources)`);
+      const openaiNote = record.openai ? `, OpenAI: ${record.openai.sig}/${record.openai.cv}` : "";
+      console.log(`[pipeline] ${tickerMeta.s}: Jev ${record.jev.sig}/${record.jev.cv}${openaiNote} (${record.src.length} sources)`);
     } catch (err) {
       console.error(`[pipeline] Skipping ${tickerMeta.s}: ${err.message}`);
     }
     await sleep(REQUEST_SPACING_MS);
   }
 
-  const payload = { generatedAt: new Date().toISOString(), tickers: results };
+  const payload = { generatedAt: new Date().toISOString(), openaiEnabled: OPENAI_ENABLED, tickers: results };
   await writeCache(payload);
   console.log(`[pipeline] Wrote ${results.length}/${TICKERS.length} tickers to cache.`);
   return payload;

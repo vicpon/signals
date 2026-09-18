@@ -54,6 +54,10 @@ body{background:var(--p-bg);color:var(--p-text);margin:0;font-family:var(--p-fon
 .fc-signal{ display:flex; align-items:center; gap:.4rem; font:600 .74rem/1 var(--p-font-body); color:var(--p-dim); min-width:88px; }
 .fc-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
 .fc-dot.bull{ background:var(--p-bull); } .fc-dot.bear{ background:var(--p-bear); } .fc-dot.neu{ background:var(--p-neu); }
+.fc-engines{ display:flex; flex-direction:column; gap:.3rem; min-width:150px; }
+.fc-engine-row{ display:flex; align-items:center; gap:.35rem; font:600 .72rem/1 var(--p-font-body); color:var(--p-dim); }
+.fc-engine-label{ font-size:.62rem; text-transform:uppercase; letter-spacing:.04em; color:var(--p-dim); min-width:44px; }
+.fc-disagree{ font:700 .62rem/1 var(--p-font-body); text-transform:uppercase; letter-spacing:.04em; color:var(--p-bear); border:1px solid var(--p-bear); border-radius:999px; padding:.15rem .4rem; margin-left:.2rem; }
 .fc-meter{ width:60px; flex:none; }
 .fc-meter-track{ height:3px; background:var(--p-border); border-radius:2px; overflow:hidden; }
 .fc-meter-fill{ height:100%; background:var(--fc-accent); }
@@ -93,6 +97,11 @@ body{background:var(--p-bg);color:var(--p-text);margin:0;font-family:var(--p-fon
 .p-tag.bull{ color:var(--p-bull); background:var(--p-bull-tint); }
 .p-tag.bear{ color:var(--p-bear); background:var(--p-bear-tint); }
 .p-tag.neu{ color:var(--p-neu); background:var(--p-neu-tint); }
+.p-tag.na{ color:var(--p-dim); background:var(--p-border); }
+.p-source-tags{ display:flex; gap:.35rem; flex-wrap:wrap; margin-bottom:.4rem; }
+.p-tag-label{ font-size:.6rem; text-transform:uppercase; letter-spacing:.03em; align-self:center; color:var(--p-dim); }
+.p-engine-block{ margin-bottom:1.2rem; }
+.p-engine-title{ font:700 .72rem/1 inherit; letter-spacing:.04em; text-transform:uppercase; color:var(--p-dim); margin-bottom:.5rem; }
 
 .fc-status{ text-align:center; color:var(--p-dim); padding:2rem 0; font-size:.9rem; }
 
@@ -102,7 +111,7 @@ body{background:var(--p-bg);color:var(--p-text);margin:0;font-family:var(--p-fon
 <body>
 
 <main class="fc-wrap">
-  <h1 class="fc-title">Today's signals<small>Stocks &amp; crypto · news + filings, judged by Jev</small></h1>
+  <h1 class="fc-title">Today's signals<small>Stocks &amp; crypto · TypeSafe/Jev vs OpenAI, judging the same sources</small></h1>
   <div class="fc-toolbar">
     <input class="fc-search" id="fc-search" placeholder="Search a symbol or company…" />
     <div class="fc-chip-row" id="fc-assets">
@@ -156,7 +165,22 @@ function fmtPrice(p){ return p>=1000 ? p.toLocaleString(undefined,{maximumFracti
 function filterSort(list){
   let out = list.filter(d => state.asset==="all" || d.a===state.asset);
   if (state.q) out = out.filter(d => (d.s+" "+d.n).toLowerCase().includes(state.q.toLowerCase()));
-  return out.slice().sort((x,y)=> y.cv - x.cv);
+  return out.slice().sort((x,y)=> y.jev.cv - x.jev.cv);
+}
+
+function tagOrNA(tag){ return tag ? '<span class="p-tag '+tag+'">'+sigWord(tag)+'</span>' : '<span class="p-tag na">n/a</span>'; }
+
+function engineBlock(label, engine){
+  if (!engine) {
+    return '<div class="p-engine-block"><div class="p-engine-title">'+escapeHtml(label)+'</div>'+
+      '<div class="p-comp">Not configured for this run.</div></div>';
+  }
+  return '<div class="p-engine-block"><div class="p-engine-title">'+escapeHtml(label)+'</div>'+
+    '<p class="fc-summary">'+escapeHtml(engine.summary || "")+'</p>'+
+    '<div class="p-score-row">'+
+      '<div class="p-score-box"><div class="k">Signal</div><div class="v">'+sigWord(engine.sig)+'</div></div>'+
+      '<div class="p-score-box"><div class="k">Conviction</div><div class="v">'+engine.cv+' / 100</div></div>'+
+    '</div></div>';
 }
 
 // All externally-sourced text (headlines, outlet names, company names from
@@ -164,18 +188,18 @@ function filterSort(list){
 // innerHTML — this dashboard renders live news, so that text is untrusted.
 function buildPanelHTML(d){
   const sourcesHtml = d.src.map(s => (
-    '<div class="p-source"><div class="p-source-top"><span>'+escapeHtml(s.so)+' · '+escapeHtml(s.t)+' ago</span>'+
-    '<span class="p-tag '+s.tag+'">'+sigWord(s.tag)+'</span></div>'+
-    '<div class="p-source-head">'+escapeHtml(s.h)+'</div></div>'
+    '<div class="p-source"><div class="p-source-top"><span>'+escapeHtml(s.so)+' · '+escapeHtml(s.t)+' ago</span></div>'+
+    '<div class="p-source-head">'+escapeHtml(s.h)+'</div>'+
+    '<div class="p-source-tags">'+
+      '<span class="p-tag-label">Jev</span>'+tagOrNA(s.jevTag)+
+      '<span class="p-tag-label">OpenAI</span>'+tagOrNA(s.openaiTag)+
+    '</div></div>'
   )).join("");
   return '<div class="p-head"><div><h2 class="p-sym">'+escapeHtml(d.s)+'</h2><div class="p-name">'+escapeHtml(d.n)+' · '+escapeHtml(d.sec)+'</div>'+
       '<div class="p-price">'+fmtPrice(d.p)+' <span class="'+(d.c>=0?"pup":"pdown")+'">'+fmtChg(d.c)+'</span></div></div>'+
       '<button class="p-close" aria-label="Close">✕</button></div>'+
-    '<p class="fc-summary">'+escapeHtml(d.summary || "")+'</p>'+
-    '<div class="p-score-row">'+
-      '<div class="p-score-box"><div class="k">Signal</div><div class="v">'+sigWord(d.sig)+'</div></div>'+
-      '<div class="p-score-box"><div class="k">Conviction</div><div class="v">'+d.cv+' / 100</div></div>'+
-    '</div>'+
+    engineBlock("TypeSafe / Jev", d.jev)+
+    engineBlock("OpenAI (comparison)", d.openai)+
     '<div class="p-section-title">Sources</div>'+
     (sourcesHtml || '<div class="p-comp">No sources found for this ticker.</div>');
 }
@@ -196,19 +220,34 @@ function renderRow(d){
     el("div", { class: "fc-sym" }, d.s),
     el("div", { class: "fc-name" }, d.n),
   );
-  const signal = el("div", { class: "fc-signal" },
-    el("span", { class: "fc-dot " + d.sig }),
-    sigWord(d.sig),
+
+  const jevRow = el("div", { class: "fc-engine-row" },
+    el("span", { class: "fc-engine-label" }, "Jev"),
+    el("span", { class: "fc-dot " + d.jev.sig }),
+    sigWord(d.jev.sig),
   );
+  const engines = el("div", { class: "fc-engines" }, jevRow);
+  if (d.openai) {
+    const openaiRow = el("div", { class: "fc-engine-row" },
+      el("span", { class: "fc-engine-label" }, "OpenAI"),
+      el("span", { class: "fc-dot " + d.openai.sig }),
+      sigWord(d.openai.sig),
+    );
+    if (d.openai.sig !== d.jev.sig) {
+      openaiRow.appendChild(el("span", { class: "fc-disagree" }, "differ"));
+    }
+    engines.appendChild(openaiRow);
+  }
+
   const meterFill = el("div", { class: "fc-meter-fill" });
-  meterFill.style.width = d.cv + "%";
+  meterFill.style.width = d.jev.cv + "%";
   const meter = el("div", { class: "fc-meter" }, el("div", { class: "fc-meter-track" }, meterFill));
   const priceCol = el("div", { class: "fc-price-col" },
     el("div", { class: "fc-price" }, fmtPrice(d.p)),
     el("div", { class: "fc-chg " + (d.c>=0?"up":"down") }, fmtChg(d.c)),
   );
   const row = el("div", { class: "fc-row", "data-sym": d.s, onclick: () => openPanel(buildPanelHTML(d)) },
-    main, signal, meter, priceCol,
+    main, engines, meter, priceCol,
   );
   return row;
 }

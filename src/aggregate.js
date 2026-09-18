@@ -8,34 +8,15 @@ function timeAgo(date) {
   return `${Math.round(hours / 24)}d`;
 }
 
-// Combines per-article Jev judgments into one explainable per-ticker record.
-// This is deterministic code, not another model call: TypeSafe's own
-// guidance is to keep composition and thresholds in code so they stay
-// reviewable and don't require re-running inference to retune.
-export function aggregateTicker(tickerMeta, quote, judgedArticles) {
-  const src = judgedArticles
-    .slice()
-    .sort((a, b) => b.publishedAt - a.publishedAt)
-    .map((a) => ({
-      so: a.source,
-      h: a.headline,
-      t: timeAgo(a.publishedAt),
-      tag: a.judgment.sentiment,
-    }));
-
+// Combines one engine's per-article judgments into an explainable
+// per-ticker signal. This is deterministic code, not another model call:
+// TypeSafe's own guidance is to keep composition and thresholds in code so
+// they stay reviewable and don't require re-running inference to retune.
+// Engine-agnostic on purpose — called once per engine (Jev, optionally
+// OpenAI) on the same underlying articles, so results are comparable.
+export function summarizeJudgments(engineLabel, judgedArticles) {
   if (judgedArticles.length === 0) {
-    return {
-      s: tickerMeta.s,
-      n: quote.name || tickerMeta.n,
-      sec: tickerMeta.sec,
-      a: tickerMeta.a,
-      p: quote.price,
-      c: quote.changePct,
-      sig: "neu",
-      cv: 0,
-      src: [],
-      summary: "No recent coverage found for this ticker.",
-    };
+    return { sig: "neu", cv: 0, summary: "No recent coverage found for this ticker.", regulatoryFlag: false };
   }
 
   const weightedVotes = { bull: 0, bear: 0, neu: 0 };
@@ -67,11 +48,44 @@ export function aggregateTicker(tickerMeta, quote, judgedArticles) {
   const neuCount = judgedArticles.filter((a) => a.judgment.sentiment === "neu").length;
 
   let summary =
-    `Coverage leans ${SIG_WORD[sig]} (${agreeCount} of ${judgedArticles.length} sources), ` +
+    `${engineLabel}: coverage leans ${SIG_WORD[sig]} (${agreeCount} of ${judgedArticles.length} sources), ` +
     `anchored by "${anchor.headline}" (${anchor.source}). ` +
     `${bullCount} bullish, ${neuCount} neutral, ${bearCount} bearish overall.`;
   if (regulatoryFlag) {
     summary += " At least one source flags possible regulatory or legal action.";
+  }
+
+  return { sig, cv, summary, regulatoryFlag };
+}
+
+// The source list is shared between engines (both judge the same articles);
+// each entry carries a tag per engine that actually judged it, so the UI
+// can show them side by side.
+export function buildSourceList(articles) {
+  return articles
+    .slice()
+    .sort((a, b) => b.publishedAt - a.publishedAt)
+    .map((a) => ({
+      so: a.source,
+      h: a.headline,
+      t: timeAgo(a.publishedAt),
+      jevTag: a.jevJudgment?.sentiment ?? null,
+      openaiTag: a.openaiJudgment?.sentiment ?? null,
+    }));
+}
+
+export function buildTickerRecord(tickerMeta, quote, articles, { openaiEnabled }) {
+  const jevJudged = articles
+    .filter((a) => a.jevJudgment)
+    .map((a) => ({ ...a, judgment: a.jevJudgment }));
+  const jev = summarizeJudgments("TypeSafe/Jev", jevJudged);
+
+  let openai = null;
+  if (openaiEnabled) {
+    const openaiJudged = articles
+      .filter((a) => a.openaiJudgment)
+      .map((a) => ({ ...a, judgment: a.openaiJudgment }));
+    openai = summarizeJudgments("OpenAI", openaiJudged);
   }
 
   return {
@@ -81,10 +95,8 @@ export function aggregateTicker(tickerMeta, quote, judgedArticles) {
     a: tickerMeta.a,
     p: quote.price,
     c: quote.changePct,
-    sig,
-    cv,
-    src,
-    summary,
-    regulatoryFlag,
+    jev,
+    openai,
+    src: buildSourceList(articles),
   };
 }
