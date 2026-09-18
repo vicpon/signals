@@ -23,24 +23,13 @@ Docs entry points: `https://docs.typesafe.ai/llms.txt` (index),
 `/concepts/use-case-map.md` (feature-extraction pattern + financial-crime
 use case).
 
-## UI direction: chosen — "Focus"
+## UI
 
-Four UI/UX mockups were designed and compared as one Claude Artifact:
-`mockups/signal-desk.html` (also live at
-https://claude.ai/artifact/5H7WVENMXKGZhdtYiyWPbr — private, owned by
-poncev@gmail.com). Directions explored: Terminal (dense trading-desk,
-phosphor amber), Heat Grid (HUD tile grid), Ticker Tape (mechanical
-paper-tape), Focus (quiet, spacious consumer app). That file is kept as a
-historical reference for the comparison; it still uses fabricated sample
-data and isn't wired to the pipeline.
-
-**Focus was picked**, and is the real shipped UI at `public/index.html` —
-the minimal/spacious direction: big readable typography (Newsreader serif
-for numerals + Manrope sans for UI), a card-style row list, and a
-right-side sliding panel for detail (not a full-page navigation) that opens
-with a **synthesized one-line plain-English summary** above the raw source
-list. It fetches live data from `/api/signals` (backed by
-`data/signals.json`) instead of the mockup's hardcoded array.
+`public/index.html` is the shipped dashboard — a card-style row list with a
+right-side sliding detail panel that opens with the synthesized one-line
+summary above the raw source list. It fetches live data from `/api/signals`
+(backed by `data/signals.json`); all externally-sourced text (headlines,
+outlet names) is HTML-escaped before rendering (see Security notes).
 
 ## Data shape (real pipeline output, `data/signals.json`)
 
@@ -94,7 +83,7 @@ read API was retired (confirmed: anonymous requests now get a login-wall
   (`src/aggregate.js`), per TypeSafe's own guidance to keep composition and
   thresholds in reviewable code rather than another model call.
 - **Correction to the original plan above**: Jev returns typed judgments and
-  probabilities, not generated prose, so it can't produce the Focus panel's
+  probabilities, not generated prose, so it can't produce the dashboard's
   synthesized summary directly. That summary is instead assembled
   deterministically in code from the aggregated judgments (majority signal,
   agreement ratio, and the highest-confidence anchor headline) — see
@@ -111,7 +100,7 @@ npm install
 cp .env.example .env   # add your TYPESAFE_API_KEY and SEC_USER_AGENT
 npm run pipeline        # fetches quotes/news/filings, judges via Jev,
                          # writes data/signals.json
-npm start                # serves the Focus dashboard + /api/signals
+npm start                # serves the dashboard + /api/signals
 ```
 
 `data/signals.json` is git-ignored — it's generated output, not source.
