@@ -175,13 +175,14 @@ cp .env.example .env   # add your TYPESAFE_API_KEY and SEC_USER_AGENT
                          # (optionally OPENAI_API_KEY for the comparison)
 npm run pipeline        # fetches quotes/news/filings, judges via Jev,
                          # writes data/signals.json
-npm start                # serves the dashboard + /api/signals
-```
-
-`data/signals.json` is git-ignored — it's generated output, not source.
-Re-run `npm run pipeline` on a schedule (e.g. cron) to refresh it; the
-server itself is read-only and never triggers the pipeline, so it never
-spends TypeSafe/API quota on its own.
+`data/signals.json` is **committed as demo data** — a snapshot of a full
+run, so a fresh clone gets a populated dashboard immediately (regenerating
+it needs an API key and ~a minute per ticker). It's still generated
+output: the snapshot goes stale (check the footer's "updated" timestamp), and every
+full `npm run pipeline` run will leave the file modified locally — commit
+the refresh or `git checkout` it away. Re-run on a schedule (e.g. cron) to
+keep a live deployment fresh; the server itself is read-only and never
+triggers the pipeline, so it never spends TypeSafe/API quota on its own.
 
 The ticker universe (`src/config.js`) is a curated ~110 names across
 sectors (stocks + crypto) — a hand-picked list, not a live top-100-by-
@@ -204,8 +205,10 @@ For quick iteration you can also run a subset straight from code:
 - News headlines and outlet names are live, external, untrusted text. The
   dashboard (`public/index.html`) HTML-escapes every externally-sourced
   string before it touches `innerHTML`.
-- No secrets, cache data, or `node_modules` are committed — see
-  `.gitignore` and `.env.example`.
+- No secrets or `node_modules` are committed — see `.gitignore` and
+  `.env.example`. The committed demo snapshot contains third-party
+  headlines; re-check the Seeking Alpha usage restriction before ever
+  turning this into a hosted service.
 
 ## Not yet built (next steps discussed)
 
