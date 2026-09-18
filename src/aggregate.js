@@ -74,7 +74,7 @@ export function buildSourceList(articles) {
     }));
 }
 
-export function buildTickerRecord(tickerMeta, quote, articles, { openaiEnabled }) {
+export function buildTickerRecord(tickerMeta, quote, articles, { openaiEnabled, crowdSignal = null }) {
   const jevJudged = articles
     .filter((a) => a.jevJudgment)
     .map((a) => ({ ...a, judgment: a.jevJudgment }));
@@ -97,6 +97,10 @@ export function buildTickerRecord(tickerMeta, quote, articles, { openaiEnabled }
     c: quote.changePct,
     jev,
     openai,
+    // Third, externally-produced signal (TradingView rating / CoinGecko
+    // votes) — passed through as-is, not aggregated from per-article
+    // judgments like the two engines above. `provider` names the source.
+    crowd: crowdSignal,
     src: buildSourceList(articles),
   };
 }

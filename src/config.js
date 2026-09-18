@@ -140,10 +140,28 @@ export const MAX_ARTICLES_PER_TICKER = 8;
 export const FILING_LOOKBACK_DAYS = 14;
 export const RELEVANT_FILING_FORMS = new Set(["8-K", "10-Q", "10-K", "4", "SC 13D", "SC 13G"]);
 
-// Sequential per-ticker delay so the pipeline stays a good citizen of the
-// free, keyless public endpoints it depends on (Yahoo Finance, CoinGecko,
-// Google News, Seeking Alpha, SEC EDGAR) instead of bursting them.
-export const REQUEST_SPACING_MS = 350;
+// Integer env override: parsed value when set and valid, else the fallback.
+function envInt(name, fallback) {
+  const raw = process.env[name];
+  if (raw == null || raw === "") return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+// Pause between tickers, overridable via REQUEST_SPACING_MS in .env. Each
+// ticker fires a burst of up to MAX_ARTICLES_PER_TICKER × 2 judge calls
+// (Jev + OpenAI) plus its quote/news fetches back-to-back; 30s between
+// tickers keeps that burst rate low enough to stay clear of 429s.
+// Full-universe runs are slow by design (~2h at this setting) — pass a
+// subset to runPipeline() for dev runs.
+export const REQUEST_SPACING_MS = envInt("REQUEST_SPACING_MS", 30_000);
+
+// Crowd-source pacing, separate from the per-ticker pause: TradingView's
+// symbol search is a light endpoint (~95 lookups, 1s apart is polite), while
+// CoinGecko's keyless /coins/{id} tolerates only a handful of calls per
+// minute before it starts returning 429s.
+export const CROWD_SEARCH_SPACING_MS = envInt("CROWD_SEARCH_SPACING_MS", 1_000);
+export const CROWD_COIN_SPACING_MS = envInt("CROWD_COIN_SPACING_MS", 10_000);
 
 export const SEC_USER_AGENT =
   process.env.SEC_USER_AGENT || "signals-dashboard/0.1 (contact: set SEC_USER_AGENT in .env)";

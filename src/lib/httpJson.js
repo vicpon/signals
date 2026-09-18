@@ -4,11 +4,11 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 // rather than error) and surfaces non-2xx responses as errors with the
 // status attached, so callers can decide whether to skip a single ticker
 // instead of crashing the whole pipeline run.
-export async function fetchText(url, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+export async function fetchText(url, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS, method = "GET", body } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { headers, signal: controller.signal });
+    const res = await fetch(url, { headers, signal: controller.signal, method, body });
     if (!res.ok) {
       const err = new Error(`${res.status} ${res.statusText} for ${url}`);
       err.status = res.status;

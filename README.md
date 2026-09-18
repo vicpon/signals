@@ -1,9 +1,9 @@
 # Signals
 
-A dashboard that scans a top-100 list of stocks & crypto and surfaces an
-aggregate bullish/bearish/neutral signal per ticker, derived from news,
-filings, and social sources — with the source articles shown alongside the
-signal so it's explainable, not a black box.
+A dashboard that scans a curated ~110-name list of stocks & crypto and
+surfaces an aggregate bullish/bearish/neutral signal per ticker, derived
+from news, filings, and social sources — with the source articles shown
+alongside the signal so it's explainable, not a black box.
 
 ## Judgment engine: TypeSafe / Jev
 
@@ -26,25 +26,39 @@ use case).
 ## UI
 
 `public/index.html` is the shipped dashboard — a card-style row list with a
-right-side sliding detail panel that opens with the synthesized one-line
-summary above the raw source list. It fetches live data from `/api/signals`
-(backed by `data/signals.json`); all externally-sourced text (headlines,
-outlet names) is HTML-escaped before rendering (see Security notes).
+judging-speed table up top (Jev vs OpenAI per-article latency from the
+run's `timings`), plus a right-side sliding detail panel that opens with the
+synthesized one-line summary above the raw source list. Rows carry three
+signals — Jev, optional OpenAI, and the crowd signal (`TradingView` /
+`CoinGecko votes`) — with "differ" flags against Jev. It fetches live data
+from `/api/signals` (backed by `data/signals.json`); all externally-sourced
+text (headlines, outlet names) is HTML-escaped before rendering (see
+Security notes).
 
 ## Data shape (real pipeline output, `data/signals.json`)
 
 ```js
-{ s, n, sec, a /* 'stock'|'crypto' */, p /* price */, c /* %chg */,
-  jev: { sig /* 'bull'|'bear'|'neu' */, cv /* 0-100 conviction */,
-         summary /* one-line plain-English readout, code-composed */,
-         regulatoryFlag /* true if any source trips the regulatory Noul */ },
-  openai: /* same shape as `jev`, or null if OPENAI_API_KEY is unset */,
-  src: [{ so /* source name */, h /* headline */, t /* time-ago */,
-          jevTag /* 'bull'|'bear'|'neu' */, openaiTag /* same, or null */ }] }
+{ generatedAt, openaiEnabled,
+  timings: { jev: { calls, meanMs, medianMs, p95Ms, totalMs },
+             openai /* same shape, or null if OPENAI_API_KEY unset */ },
+  tickers: [
+    { s, n, sec, a /* 'stock'|'crypto' */, p /* price */, c /* %chg */,
+      jev: { sig /* 'bull'|'bear'|'neu' */, cv /* 0-100 conviction */,
+             summary /* one-line plain-English readout, code-composed */,
+             regulatoryFlag /* true if any source trips the regulatory Noul */ },
+      openai: /* same shape as `jev`, or null if OPENAI_API_KEY is unset */,
+      crowd: { sig, cv, summary, provider /* 'TradingView'|'CoinGecko votes' */ } | null,
+      src: [{ so /* source name */, h /* headline */, t /* time-ago */,
+              jevTag /* 'bull'|'bear'|'neu' */, openaiTag /* same, or null */ }] } ] }
 ```
 
 `jev` and `openai` are two independent aggregations of judgments over the
-*same* `src` list — see "TypeSafe vs OpenAI comparison" below.
+*same* `src` list — see "TypeSafe vs OpenAI comparison" below. `timings`
+records per-call engine latency for the dashboard's speed table (successful
+judgments only — a timed-out request says nothing about judgment speed).
+`crowd` is the third signal: an externally-produced read from a free public
+source, passed through as-is rather than aggregated from per-article
+judgments.
 
 ## Real pipeline — built, free data sources only
 
@@ -68,6 +82,17 @@ see below.
   app (`reddit.com/prefs/apps` → `REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET`
   in `.env`) using the OAuth2 client-credentials grant — no user password
   needed. Skipped entirely if those vars are unset.
+- **Crowd signal** (`src/sources/crowdSignal.js`): the third, non-LLM
+  signal. Stocks get TradingView's aggregate rating (sell-side analysts +
+  technicals blended into a −1…+1 score) via their keyless symbol-search and
+  screener-scan endpoints — one batched POST rates the whole universe.
+  Crypto gets CoinGecko's community bull/bear votes
+  (`sentiment_votes_up_percentage`). Both are the endpoints the sites' own
+  UIs call — public and keyless but unofficial, so they can break without
+  notice; any failure just degrades to "no crowd signal for this ticker".
+  The lookups are paced (`CROWD_SEARCH_SPACING_MS`,
+  `CROWD_COIN_SPACING_MS` in `.env`) to stay under CoinGecko's keyless
+  rate limits.
 - **Filings**: SEC's own `data.sec.gov/submissions/CIK…` API, resolved from
   the official `company_tickers.json` ticker→CIK map. Form 4s (insider
   trades) get their actual transaction detail fetched and summarized —
@@ -78,7 +103,11 @@ see below.
 - **Tried and dropped**: MarketWatch and Reuters no longer expose free
   per-ticker RSS (tested live: MarketWatch's redirects to a 404, Reuters'
   feed 301s to a dead endpoint); CNBC's RSS is general business news, not
-  per-company, so it wasn't useful for this per-ticker pipeline.
+  per-company, so it wasn't useful for this per-ticker pipeline. For a
+  TipRanks-style analyst signal: TipRanks' own API returns 403 (Cloudflare)
+  and Bloomberg has no free API at all; Yahoo's analyst-rating endpoint now
+  demands a cookie+crumb handshake that rate-limits (429) — hence
+  TradingView's scanner for the stock crowd signal.
 - **Judgment engine**: TypeSafe/Jev, called server-side only
   (`src/judge.js`). Per article, one `systemOne` request asks three
   independent questions — a `Choice` for sentiment direction (bull/bear/
@@ -120,6 +149,12 @@ for reading the results honestly:**
   field. That's an introspective guess, not a distribution — treat OpenAI's
   "confidence" as a materially weaker signal than Jev's.
 
+The third, crowd signal (`src/sources/crowdSignal.js`) is a different class
+entirely — not a judgment engine at all. TradingView's rating is a blend of
+sell-side analyst calls and technical indicators; CoinGecko's votes are raw
+retail sentiment. Neither reads the article list, so disagreement between
+Jev and the crowd signal isn't an error — it's model-vs-market triangulation.
+
 Also worth knowing before running this: **OpenAI is a paid API**, unlike
 every other integration in this project. It's opt-in for exactly that
 reason. Enabling it roughly doubles per-article judgment calls (one to Jev,
@@ -151,8 +186,13 @@ spends TypeSafe/API quota on its own.
 The ticker universe (`src/config.js`) is a curated ~110 names across
 sectors (stocks + crypto) — a hand-picked list, not a live top-100-by-
 market-cap ranking. A full run makes several HTTP calls and up to 8 Jev
-calls per ticker, so it takes a while (tens of minutes) and uses real Jev
-quota; trim `TICKERS` for faster/cheaper iteration while developing.
+calls per ticker, with a deliberate 30s pause between tickers
+(`REQUEST_SPACING_MS`, override in `.env`) so the per-ticker burst of judge
+calls stays clear of 429s — expect a full-universe run to take on the order
+of two hours and real Jev quota.
+
+For quick iteration you can also run a subset straight from code:
+`runPipeline([tickerMeta, …])` accepts any slice of `TICKERS`.
 
 ### Security notes
 

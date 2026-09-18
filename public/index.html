@@ -54,10 +54,14 @@ body{background:var(--p-bg);color:var(--p-text);margin:0;font-family:var(--p-fon
 .fc-signal{ display:flex; align-items:center; gap:.4rem; font:600 .74rem/1 var(--p-font-body); color:var(--p-dim); min-width:88px; }
 .fc-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
 .fc-dot.bull{ background:var(--p-bull); } .fc-dot.bear{ background:var(--p-bear); } .fc-dot.neu{ background:var(--p-neu); }
-.fc-engines{ display:flex; flex-direction:column; gap:.3rem; min-width:150px; }
+.fc-engines{ display:flex; flex-direction:column; gap:.4rem; min-width:150px; }
+.fc-engine{ display:flex; flex-direction:column; gap:.18rem; }
 .fc-engine-row{ display:flex; align-items:center; gap:.35rem; font:600 .72rem/1 var(--p-font-body); color:var(--p-dim); }
-.fc-engine-label{ font-size:.62rem; text-transform:uppercase; letter-spacing:.04em; color:var(--p-dim); min-width:44px; }
-.fc-disagree{ font:700 .62rem/1 var(--p-font-body); text-transform:uppercase; letter-spacing:.04em; color:var(--p-bear); border:1px solid var(--p-bear); border-radius:999px; padding:.15rem .4rem; margin-left:.2rem; }
+/* Fixed width (not min-width) so the dot/signal column lines up across
+   Jev, OpenAI and crowd rows even with the long provider labels. */
+.fc-engine-label{ font-size:.62rem; text-transform:uppercase; letter-spacing:.04em; color:var(--p-dim); width:5.4rem; flex:none; }
+.fc-engine-differ{ padding-left:calc(5.4rem + .35rem); }
+.fc-disagree{ font:700 .62rem/1 var(--p-font-body); text-transform:uppercase; letter-spacing:.04em; color:var(--p-bear); border:1px solid var(--p-bear); border-radius:999px; padding:.15rem .4rem; display:inline-block; width:max-content; }
 .fc-meter{ width:60px; flex:none; }
 .fc-meter-track{ height:3px; background:var(--p-border); border-radius:2px; overflow:hidden; }
 .fc-meter-fill{ height:100%; background:var(--fc-accent); }
@@ -66,6 +70,15 @@ body{background:var(--p-bg);color:var(--p-text);margin:0;font-family:var(--p-fon
 .fc-chg{ font-size:.78rem; font-variant-numeric:tabular-nums; }
 .fc-chg.up{ color:var(--p-bull); } .fc-chg.down{ color:var(--p-bear); }
 .fc-foot{ text-align:center; font-size:.78rem; color:var(--p-dim); margin-top:1.2rem; }
+.fc-timing{ background:var(--p-surface); border:1px solid var(--p-border); border-radius:var(--p-radius); padding:.9rem 1rem .8rem; margin:0 0 1.3rem; }
+.fc-timing-title{ font:700 .68rem/1 var(--p-font-body); letter-spacing:.08em; text-transform:uppercase; color:var(--p-dim); margin-bottom:.65rem; }
+.fc-timing table{ width:100%; border-collapse:collapse; font:500 .8rem/1.4 var(--p-font-body); }
+.fc-timing th{ font:700 .62rem/1 var(--p-font-body); text-transform:uppercase; letter-spacing:.05em; color:var(--p-dim); text-align:right; padding:0 0 .5rem; }
+.fc-timing th:first-child, .fc-timing td:first-child{ text-align:left; }
+.fc-timing td{ text-align:right; padding:.35rem 0; border-top:1px solid var(--p-border); font-family:var(--p-font-mono); font-size:.76rem; font-variant-numeric:tabular-nums; }
+.fc-timing td:first-child{ font-family:var(--p-font-body); font-weight:700; font-size:.78rem; }
+.fc-timing .muted{ color:var(--p-dim); }
+.fc-timing .fastest{ color:var(--fc-accent); font-weight:600; }
 .fc-summary{ font-size:.92rem; line-height:1.6; color:var(--p-text); background:var(--p-surface); border:1px solid var(--p-border); border-radius:var(--p-radius); padding:.85rem 1rem; margin:0 0 1.2rem; font-style:italic; }
 
 .panel-backdrop{ position:fixed; inset:0; background:rgba(8,10,16,.44); opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:399; }
@@ -111,7 +124,7 @@ body{background:var(--p-bg);color:var(--p-text);margin:0;font-family:var(--p-fon
 <body>
 
 <main class="fc-wrap">
-  <h1 class="fc-title">Today's signals<small>Stocks &amp; crypto · TypeSafe/Jev vs OpenAI, judging the same sources</small></h1>
+  <h1 class="fc-title">Today's signals<small>Stocks &amp; crypto · Jev vs OpenAI judgments, plus a public crowd signal</small></h1>
   <div class="fc-toolbar">
     <input class="fc-search" id="fc-search" placeholder="Search a symbol or company…" />
     <div class="fc-chip-row" id="fc-assets">
@@ -120,6 +133,7 @@ body{background:var(--p-bg);color:var(--p-text);margin:0;font-family:var(--p-fon
       <button class="fc-chip" data-asset="crypto">Crypto</button>
     </div>
   </div>
+  <div id="fc-timing" class="fc-timing" hidden></div>
   <div id="fc-status" class="fc-status" hidden></div>
   <div class="fc-list" id="fc-rows"></div>
   <div class="fc-foot" id="fc-foot"></div>
@@ -136,6 +150,8 @@ body{background:var(--p-bg);color:var(--p-text);margin:0;font-family:var(--p-fon
 
 let DATA = [];
 let generatedAt = null;
+let timings = null;
+let openaiEnabled = false;
 const state = { asset: "all", q: "" };
 
 function escapeHtml(str){
@@ -161,6 +177,38 @@ function arrow(sig){ return sig==="bull" ? "▲" : sig==="bear" ? "▼" : "–";
 function sigWord(sig){ return sig==="bull" ? "Bullish" : sig==="bear" ? "Bearish" : "Neutral"; }
 function fmtChg(c){ return (c>=0?"+":"")+c.toFixed(2)+"%"; }
 function fmtPrice(p){ return p>=1000 ? p.toLocaleString(undefined,{maximumFractionDigits:0}) : p.toFixed(2); }
+
+function fmtMs(ms){
+  if (ms == null) return "—";
+  if (ms >= 10000) return (ms/1000).toFixed(1)+"s";
+  if (ms >= 1000) return (ms/1000).toFixed(2)+"s";
+  return Math.round(ms)+"ms";
+}
+
+// Engine latency comparison table, from the run's `timings` payload. Absent
+// (cache from an older run) → hidden entirely. All cell text is built from
+// numbers or fixed strings, so no escaping is needed here.
+function renderTiming(){
+  const box = document.getElementById("fc-timing");
+  if (!timings || (!timings.jev && !timings.openai)) { box.hidden = true; return; }
+  const engines = [["TypeSafe/Jev", timings.jev], ["OpenAI", timings.openai]];
+  const means = engines.map(e => e[1] && e[1].meanMs).filter(m => m != null);
+  const fastest = means.length > 1 ? Math.min(...means) : null;
+  const rows = engines.map(([name, t]) => {
+    if (!t) {
+      const note = openaiEnabled ? "no successful judgments this run" : "not enabled this run";
+      return '<tr><td>'+name+'</td><td colspan="5" class="muted">'+note+'</td></tr>';
+    }
+    const avgClass = fastest != null && t.meanMs === fastest ? " fastest" : "";
+    return '<tr><td>'+name+'</td><td>'+t.calls+'</td><td class="'+avgClass.trim()+'">'+fmtMs(t.meanMs)+'</td>'+
+      '<td>'+fmtMs(t.medianMs)+'</td><td>'+fmtMs(t.p95Ms)+'</td><td>'+fmtMs(t.totalMs)+'</td></tr>';
+  }).join("");
+  box.innerHTML =
+    '<div class="fc-timing-title">Judging speed — per successful article judgment, this run</div>'+
+    '<table><thead><tr><th>Engine</th><th>Calls</th><th>Avg</th><th>Median</th><th>P95</th><th>Total</th></tr></thead>'+
+    '<tbody>'+rows+'</tbody></table>';
+  box.hidden = false;
+}
 
 function filterSort(list){
   let out = list.filter(d => state.asset==="all" || d.a===state.asset);
@@ -200,6 +248,7 @@ function buildPanelHTML(d){
       '<button class="p-close" aria-label="Close">✕</button></div>'+
     engineBlock("TypeSafe / Jev", d.jev)+
     engineBlock("OpenAI (comparison)", d.openai)+
+    (d.crowd ? engineBlock(d.crowd.provider, d.crowd) : "")+
     '<div class="p-section-title">Sources</div>'+
     (sourcesHtml || '<div class="p-comp">No sources found for this ticker.</div>');
 }
@@ -221,23 +270,26 @@ function renderRow(d){
     el("div", { class: "fc-name" }, d.n),
   );
 
-  const jevRow = el("div", { class: "fc-engine-row" },
-    el("span", { class: "fc-engine-label" }, "Jev"),
-    el("span", { class: "fc-dot " + d.jev.sig }),
-    sigWord(d.jev.sig),
-  );
-  const engines = el("div", { class: "fc-engines" }, jevRow);
-  if (d.openai) {
-    const openaiRow = el("div", { class: "fc-engine-row" },
-      el("span", { class: "fc-engine-label" }, "OpenAI"),
-      el("span", { class: "fc-dot " + d.openai.sig }),
-      sigWord(d.openai.sig),
+  // One engine entry = label + dot + signal word, with the "differ" badge
+  // (vs Jev) on its own line below, indented under the signal word.
+  const engineEntry = (labelText, engine) => {
+    const row = el("div", { class: "fc-engine-row" },
+      el("span", { class: "fc-engine-label" }, labelText),
+      el("span", { class: "fc-dot " + engine.sig }),
+      sigWord(engine.sig),
     );
-    if (d.openai.sig !== d.jev.sig) {
-      openaiRow.appendChild(el("span", { class: "fc-disagree" }, "differ"));
+    const entry = el("div", { class: "fc-engine" }, row);
+    if (engine.sig !== d.jev.sig) {
+      entry.appendChild(
+        el("div", { class: "fc-engine-differ" }, el("span", { class: "fc-disagree" }, "differ")),
+      );
     }
-    engines.appendChild(openaiRow);
-  }
+    return entry;
+  };
+
+  const engines = el("div", { class: "fc-engines" }, engineEntry("Jev", d.jev));
+  if (d.openai) engines.appendChild(engineEntry("OpenAI", d.openai));
+  if (d.crowd) engines.appendChild(engineEntry(d.crowd.provider, d.crowd));
 
   const meterFill = el("div", { class: "fc-meter-fill" });
   meterFill.style.width = d.jev.cv + "%";
@@ -278,7 +330,10 @@ async function load(){
     const payload = await res.json();
     DATA = payload.tickers || [];
     generatedAt = payload.generatedAt;
+    timings = payload.timings || null;
+    openaiEnabled = Boolean(payload.openaiEnabled);
     setStatus(DATA.length ? "" : "No tickers in the latest run.");
+    renderTiming();
     render();
   } catch (err) {
     setStatus("Couldn't load signals: " + err.message);
